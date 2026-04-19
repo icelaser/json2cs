@@ -1,0 +1,328 @@
+@page "/"
+@using System.Text
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using System.Text.RegularExpressions
+@inject IJSRuntime JS
+
+<PageTitle>json2cs.dev</PageTitle>
+
+<div class="panel">
+    <h2>JSON input</h2>
+    <textarea @bind="JsonInput" @oninput="OnInputChanged" aria-label="JSON input"></textarea>
+
+    <div class="options">
+        <div class="option-group">
+            <strong>Declaration</strong>
+            <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
+            <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
+        </div>
+
+        <div class="option-group">
+            <strong>Attributes</strong>
+            <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
+            <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
+        </div>
+
+        <div class="option-group">
+            <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
+            <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
+        </div>
+    </div>
+
+    <div class="action-row">
+        <button class="btn btn-primary" @onclick="Generate">Generate</button>
+        <button class="btn btn-secondary" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy code</button>
+        <span class="status">@StatusMessage</span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <div class="error">@ErrorMessage</div>
+    }
+</div>
+
+<section class="panel output-panel">
+    <div class="panel-header">
+        <h2>C# output</h2>
+        <button class="btn btn-plain" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy</button>
+    </div>
+    <pre class="code-block">@GeneratedCode</pre>
+</section>
+
+@code {
+    private string JsonInput { get; set; } = @"{
+  ""user_id"": 123,
+  ""full_name"": ""Anna Müller"",
+  ""is_active"": true,
+  ""roles"": [""admin"", ""editor""],
+  ""profile"": {
+    ""email"": ""anna@example.com"",
+    ""created_at"": ""2026-04-19T12:34:56Z"",
+    ""settings"": {
+      ""newsletter_opt_in"": false,
+      ""theme"": ""dark""
+    }
+  }
+}";
+
+    private string DeclarationType { get; set; } = "class";
+    private string AttributeMode { get; set; } = "system";
+    private bool UseNullableReferences { get; set; } = true;
+    private bool UseList { get; set; } = true;
+    private string GeneratedCode { get; set; } = string.Empty;
+    private string? ErrorMessage { get; set; }
+    private string StatusMessage { get; set; } = "Ready.";
+
+    protected override void OnInitialized()
+    {
+        Generate();
+    }
+
+    private void OnInputChanged(ChangeEventArgs e)
+    {
+        Generate();
+    }
+
+    private async Task CopyCode()
+    {
+        if (string.IsNullOrWhiteSpace(GeneratedCode))
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("copyToClipboard", GeneratedCode);
+        StatusMessage = "Copied to clipboard.";
+    }
+
+    private void Generate()
+    {
+        try
+        {
+            ErrorMessage = string.Empty;
+            GeneratedCode = BuildCode();
+            StatusMessage = "Generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            GeneratedCode = string.Empty;
+            ErrorMessage = $"Invalid JSON: {ex.Message}";
+            StatusMessage = string.Empty;
+        }
+    }
+
+    private string BuildCode()
+    {
+        using var document = JsonDocument.Parse(JsonInput);
+        var definitions = new List<ClassDefinition>();
+        var rootType = DetermineType(document.RootElement, "Root", definitions);
+
+        var builder = new StringBuilder();
+
+        if (UseNullableReferences)
+        {
+            builder.AppendLine("#nullable enable");
+            builder.AppendLine();
+        }
+
+        if (UseList)
+        {
+            builder.AppendLine("using System.Collections.Generic;");
+        }
+
+        builder.AppendLine(AttributeMode == "system" ? "using System.Text.Json.Serialization;" : "using Newtonsoft.Json;");
+        builder.AppendLine();
+
+        foreach (var definition in definitions)
+        {
+            builder.AppendLine($"public {definition.Kind} {definition.Name}");
+            builder.AppendLine("{");
+
+            foreach (var property in definition.Properties)
+            {
+                if (property.NeedsJsonAttribute)
+                {
+                    var attributeName = AttributeMode == "system" ? "JsonPropertyName" : "JsonProperty";
+                    builder.AppendLine($"    [{attributeName}(\"{property.JsonName}\")]");
+                }
+
+                builder.AppendLine($"    public {property.Type} {property.Name} {{ get; set; }}");
+            }
+
+            builder.AppendLine("}");
+            builder.AppendLine();
+        }
+
+        if (definitions.Count == 0)
+        {
+            builder.AppendLine($"// Unable to generate types for root type: {rootType}");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private string DetermineType(JsonElement element, string typeName, List<ClassDefinition> definitions)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => BuildObjectType(element, typeName, definitions),
+            JsonValueKind.Array => BuildArrayType(element, typeName, definitions),
+            _ => MapPrimitiveType(element)
+        };
+    }
+
+    private string BuildObjectType(JsonElement element, string typeName, List<ClassDefinition> definitions)
+    {
+        var uniqueName = GetUniqueTypeName(typeName, definitions);
+        var kind = DeclarationType == "record" ? "record" : "class";
+        var definition = new ClassDefinition(uniqueName, kind);
+
+        foreach (var property in element.EnumerateObject())
+        {
+            var propertyName = ToPascalCase(property.Name);
+
+            if (string.IsNullOrWhiteSpace(propertyName))
+            {
+                propertyName = "Item";
+            }
+
+            if (char.IsDigit(propertyName[0]))
+            {
+                propertyName = "_" + propertyName;
+            }
+
+            if (ReservedWords.Contains(propertyName))
+            {
+                propertyName = "@" + propertyName;
+            }
+
+            var propertyType = DetermineType(property.Value, propertyName + "Value", definitions);
+
+            if (UseNullableReferences && IsReferenceType(propertyType))
+            {
+                propertyType += "?";
+            }
+
+            var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
+            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute));
+        }
+
+        definitions.Add(definition);
+        return uniqueName;
+    }
+
+    private string BuildArrayType(JsonElement element, string typeName, List<ClassDefinition> definitions)
+    {
+        var itemType = "object";
+
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            itemType = DetermineType(item, typeName + "Item", definitions);
+            break;
+        }
+
+        if (itemType == "object")
+        {
+            itemType = "object";
+        }
+
+        return UseList ? $"List<{itemType}>" : $"{itemType}[]";
+    }
+
+    private string MapPrimitiveType(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => "string",
+            JsonValueKind.Number => element.TryGetInt32(out _) ? "int" : element.TryGetInt64(out _) ? "long" : "double",
+            JsonValueKind.True or JsonValueKind.False => "bool",
+            JsonValueKind.Null => "object",
+            _ => "object",
+        };
+    }
+
+    private string GetUniqueTypeName(string baseName, List<ClassDefinition> definitions)
+    {
+        var name = baseName;
+        var count = 1;
+
+        while (definitions.Any(d => d.Name == name))
+        {
+            name = baseName + count;
+            count++;
+        }
+
+        return name;
+    }
+
+    private bool IsReferenceType(string typeName)
+    {
+        var primitives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "int",
+            "long",
+            "double",
+            "bool",
+            "byte",
+            "short",
+            "uint",
+            "ulong",
+            "ushort",
+            "sbyte",
+            "float",
+            "decimal",
+            "char"
+        };
+
+        if (typeName.EndsWith("[]", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (typeName.StartsWith("List<", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return !primitives.Contains(typeName.TrimEnd('?'));
+    }
+
+    private static string ToPascalCase(string input)
+    {
+        var words = Regex.Split(input.Trim(), "[^A-Za-z0-9]+")
+            .Where(w => !string.IsNullOrWhiteSpace(w))
+            .Select(w => char.ToUpperInvariant(w[0]) + w.Substring(1));
+
+        var result = string.Concat(words);
+        if (string.IsNullOrEmpty(result))
+        {
+            return "Item";
+        }
+
+        return result;
+    }
+
+    private static readonly HashSet<string> ReservedWords = new(StringComparer.Ordinal)
+    {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class",
+        "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event",
+        "explicit", "extern", "false", "finally", "fixed", "float", "for", "foreach", "goto", "if",
+        "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace", "new",
+        "null", "object", "operator", "out", "override", "params", "private", "protected", "public",
+        "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static",
+        "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong",
+        "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while"
+    };
+
+    private sealed record ClassDefinition(string Name, string Kind)
+    {
+        public List<PropertyDefinition> Properties { get; } = new();
+    }
+
+    private sealed record PropertyDefinition(string JsonName, string Name, string Type, bool NeedsJsonAttribute);
+}
