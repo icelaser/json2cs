@@ -9,6 +9,12 @@
 <PageTitle>json2cs.dev</PageTitle>
 
 <div class="layout-container">
+    @if (!string.IsNullOrWhiteSpace(InitializationError))
+    {
+        <div class="initialization-error">
+            ⚠ @InitializationError
+        </div>
+    }
     <aside class="settings-panel @(SettingsCollapsed ? "collapsed" : "")">
         <button class="settings-toggle" @onclick="ToggleSettings" title="@(SettingsCollapsed ? "Settings aufklappen" : "Settings einklappen")">
             <span class="settings-toggle-icon">@(SettingsCollapsed ? "⚙" : "☰")</span>
@@ -86,6 +92,7 @@
     private string? ErrorMessage { get; set; }
     private string StatusMessage { get; set; } = "Ready.";
     private bool SettingsCollapsed { get; set; } = true;
+    private string? InitializationError { get; set; }
 
     private System.Timers.Timer? _debounceTimer;
     private IJSObjectReference? _jsonEditor;
@@ -139,6 +146,8 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to initialize Monaco editors: {ex.Message}");
+            InitializationError = "Editor konnte nicht initialisiert werden. Bitte Seite neu laden.";
+            StateHasChanged();
         }
     }
 

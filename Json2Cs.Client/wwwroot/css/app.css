@@ -21,6 +21,11 @@ body {
     color: #CCCCCC;
 }
 
+/* Hide Blazor error UI */
+#blazor-error-ui {
+    display: none !important;
+}
+
 button {
     font: inherit;
 }
@@ -474,6 +479,25 @@ html, body {
 
 .error-indicator::before {
     content: "⚠";
+}
+
+/* ===== INITIALIZATION ERROR ===== */
+.initialization-error {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #F44747;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(244, 71, 71, 0.3);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .json-error {

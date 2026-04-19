@@ -1,29 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>json2cs.dev</title>
+    <title>json2cs.dev — JSON to C# Class Generator</title>
     <base href="/" />
     <link rel="stylesheet" href="css/app.css" />
     <link href="Json2Cs.Client.styles.css" rel="stylesheet" />
+    <style>
+        #blazor-error-ui { display: none !important; }
+        .app-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #1E1E1E;
+            gap: 12px;
+        }
+        .app-loading-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1A80B6;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .app-loading-sub {
+            font-size: 0.85rem;
+            color: #666;
+            font-family: 'Segoe UI', sans-serif;
+        }
+    </style>
 </head>
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <div class="app-loading">
+            <div class="app-loading-title">json2cs.dev</div>
+            <div class="app-loading-sub">wird geladen...</div>
+        </div>
     </div>
 
-    <div id="blazor-error-ui">
-        An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
-    </div>
     <script src="js/clipboard.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>

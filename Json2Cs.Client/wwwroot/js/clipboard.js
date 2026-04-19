@@ -17,68 +17,78 @@ window.updateStatusDisplay = (message) => {
 
 // Monaco Editor initialization
 window.initializeMonacoEditor = async (containerId, initialValue, language, editable, dotnetRef) => {
-    return new Promise((resolve) => {
-        const checkMonaco = () => {
-            if (window.monaco) {
-                const container = document.getElementById(containerId);
-                if (!container) {
-                    console.error(`Container ${containerId} not found`);
-                    resolve(null);
-                    return;
-                }
+    try {
+        return new Promise((resolve) => {
+            const checkMonaco = () => {
+                try {
+                    if (window.monaco) {
+                        const container = document.getElementById(containerId);
+                        if (!container) {
+                            console.error(`Container ${containerId} not found`);
+                            resolve(null);
+                            return;
+                        }
 
-                const placeholder = document.createElement('div');
-                placeholder.className = 'editor-placeholder';
-                placeholder.textContent = language === 'json' ? '// JSON hier einfügen...' : '';
-                container.appendChild(placeholder);
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'editor-placeholder';
+                        placeholder.textContent = language === 'json' ? '// JSON hier einfügen...' : '';
+                        container.appendChild(placeholder);
 
-                const editor = monaco.editor.create(container, {
-                    value: initialValue || '',
-                    language: language,
-                    theme: 'vs-dark',
-                    fontSize: 14,
-                    lineHeight: 1.5,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    readOnly: !editable,
-                    wordWrap: 'on',
-                    renderWhitespace: 'selection',
-                    bracketPairColorization: { enabled: true },
-                    guides: {
-                        bracketPairs: true,
-                        indentation: true
-                    }
-                });
+                        const editor = monaco.editor.create(container, {
+                            value: initialValue || '',
+                            language: language,
+                            theme: 'vs-dark',
+                            fontSize: 14,
+                            lineHeight: 1.5,
+                            minimap: { enabled: false },
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            readOnly: !editable,
+                            wordWrap: 'on',
+                            renderWhitespace: 'selection',
+                            bracketPairColorization: { enabled: true },
+                            guides: {
+                                bracketPairs: true,
+                                indentation: true
+                            }
+                        });
 
-                const updatePlaceholder = () => {
-                    if (language === 'json') {
-                        placeholder.style.display = editor.getValue().length === 0 ? 'block' : 'none';
+                        const updatePlaceholder = () => {
+                            if (language === 'json') {
+                                placeholder.style.display = editor.getValue().length === 0 ? 'block' : 'none';
+                            } else {
+                                placeholder.style.display = 'none';
+                            }
+                        };
+
+                        updatePlaceholder();
+                        editor.onDidChangeModelContent(() => {
+                            updatePlaceholder();
+                            if (editable && dotnetRef) {
+                                const value = editor.getValue();
+                                dotnetRef.invokeMethodAsync('OnJsonChanged', value);
+                            }
+                        });
+
+                        resolve({
+                            dispose: () => editor.dispose(),
+                            setValue: (value) => editor.setValue(value),
+                            getValue: () => editor.getValue()
+                        });
                     } else {
-                        placeholder.style.display = 'none';
+                        setTimeout(checkMonaco, 100);
                     }
-                };
-
-                updatePlaceholder();
-                editor.onDidChangeModelContent(() => {
-                    updatePlaceholder();
-                    if (editable && dotnetRef) {
-                        const value = editor.getValue();
-                        dotnetRef.invokeMethodAsync('OnJsonChanged', value);
-                    }
-                });
-
-                resolve({
-                    dispose: () => editor.dispose(),
-                    setValue: (value) => editor.setValue(value),
-                    getValue: () => editor.getValue()
-                });
-            } else {
-                setTimeout(checkMonaco, 100);
-            }
-        };
-        checkMonaco();
-    });
+                } catch (error) {
+                    console.error('Error during Monaco editor initialization:', error);
+                    resolve(null);
+                }
+            };
+            checkMonaco();
+        });
+    } catch (error) {
+        console.error('Failed to initialize Monaco editor:', error);
+        return null;
+    }
 };
 
 window.updateMonacoEditor = (editorRef, value) => {
