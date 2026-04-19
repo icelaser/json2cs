@@ -155,6 +155,7 @@ html, body {
 .settings-panel.collapsed {
     width: 32px;
     padding: 8px;
+    overflow: hidden;
 }
 
 .settings-toggle {
@@ -204,8 +205,7 @@ html, body {
 }
 
 .settings-panel.collapsed .settings-content {
-    opacity: 0;
-    pointer-events: none;
+    display: none;
 }
 
 .settings-header {
@@ -325,6 +325,11 @@ html, body {
 .btn-primary {
     background: #1A80B6;
     color: white;
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+    height: 26px;
+    line-height: 1;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -409,6 +414,11 @@ html, body {
     gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.option-group:last-child {
+    margin-bottom: 0;
 }
 
 .option-group strong {
@@ -418,12 +428,16 @@ html, body {
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-right: 0.5rem;
+    display: block;
+    margin-bottom: 6px;
 }
+
+.option-group label {
     display: flex;
     align-items: center;
     gap: 0.25rem;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 13px;
     color: #CCCCCC;
     margin: 0;
 }
@@ -433,13 +447,8 @@ html, body {
     cursor: pointer;
     accent-color: #1A80B6;
     margin: 0;
-}
-
-.option-group:not(:last-child)::after {
-    content: "|";
-    color: #666666;
-    margin-left: 1rem;
-    font-weight: 300;
+    width: 14px;
+    height: 14px;
 }
 
 /* ===== ACTION ROW ===== */
@@ -624,6 +633,7 @@ html, body {
   .settings-panel.collapsed {
     height: auto;
     width: 100% !important;
+    overflow: hidden;
   }
 
   .editor-panel,

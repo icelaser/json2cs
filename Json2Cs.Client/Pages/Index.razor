@@ -23,20 +23,22 @@
         <div class="settings-content">
             <div class="settings-header">Settings</div>
             <div class="options">
+                <strong>Declaration</strong>
                 <div class="option-group">
-                    <strong>Declaration</strong>
                     <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "class"; Generate(); })" /> class</label>
                     <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "record"; Generate(); })" /> record</label>
                 </div>
 
+                <strong>Attributes</strong>
                 <div class="option-group">
-                    <strong>Attributes</strong>
                     <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "system"; Generate(); })" /> System.Text.Json</label>
                     <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "newtonsoft"; Generate(); })" /> Newtonsoft.Json</label>
                 </div>
 
                 <div class="option-group">
                     <label><input type="checkbox" checked="@UseNullableReferences" @onchange="@(e => { UseNullableReferences = (bool)(e.Value ?? false); Generate(); })" /> Nullable</label>
+                </div>
+                <div class="option-group">
                     <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); })" /> List&lt;T&gt;</label>
                 </div>
             </div>
