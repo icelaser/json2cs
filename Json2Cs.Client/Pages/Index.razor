@@ -36,6 +36,28 @@
                 </div>
 
                 <div class="option-group">
+                    <strong>Namespace</strong>
+                    <input type="text" placeholder="MyApp.Models" value="@Namespace" @onchange="@(e => { Namespace = e.Value?.ToString() ?? string.Empty; Generate(); _ = SaveSettingsToCookie(); })" />
+                </div>
+
+                <div class="option-group">
+                    <strong>Root class name</strong>
+                    <input type="text" placeholder="Root" value="@RootClassName" @onchange="@(e => { RootClassName = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? "Root" : e.Value?.ToString() ?? "Root"; Generate(); _ = SaveSettingsToCookie(); })" />
+                </div>
+
+                <strong>Property style</strong>
+                <div class="option-group">
+                    <label><input type="radio" name="property-style" value="get; set;" checked="@(PropertyStyle == "get; set;")" @onchange="@(e => { PropertyStyle = e.Value?.ToString() ?? "get; set;"; Generate(); _ = SaveSettingsToCookie(); })" /> get; set;</label>
+                    <label><input type="radio" name="property-style" value="get; init;" checked="@(PropertyStyle == "get; init;")" @onchange="@(e => { PropertyStyle = e.Value?.ToString() ?? "get; init;"; Generate(); _ = SaveSettingsToCookie(); })" /> get; init;</label>
+                    <label><input type="radio" name="property-style" value="get;" checked="@(PropertyStyle == "get;")" @onchange="@(e => { PropertyStyle = e.Value?.ToString() ?? "get;"; Generate(); _ = SaveSettingsToCookie(); })" /> get;</label>
+                </div>
+
+                <div class="option-group">
+                    <strong>Class suffix</strong>
+                    <input type="text" placeholder="z.B. Dto, Model" value="@ClassSuffix" @onchange="@(e => { ClassSuffix = e.Value?.ToString() ?? string.Empty; Generate(); _ = SaveSettingsToCookie(); })" />
+                </div>
+
+                <div class="option-group">
                     <label><input type="checkbox" checked="@UseNullableReferences" @onchange="@(e => { UseNullableReferences = (bool)(e.Value ?? false); Generate(); _ = SaveSettingsToCookie(); })" /> Nullable</label>
                 </div>
                 <div class="option-group">
@@ -90,6 +112,10 @@
     private string AttributeMode { get; set; } = "system";
     private bool UseNullableReferences { get; set; } = true;
     private bool UseList { get; set; } = true;
+    private string Namespace { get; set; } = string.Empty;
+    private string RootClassName { get; set; } = "Root";
+    private string PropertyStyle { get; set; } = "get; set;";
+    private string ClassSuffix { get; set; } = string.Empty;
     private string GeneratedCode { get; set; } = string.Empty;
     private string? ErrorMessage { get; set; }
     private string StatusMessage { get; set; } = "Ready.";
@@ -113,10 +139,46 @@
                 if (!string.IsNullOrEmpty(cookieValue))
                 {
                     var settings = JsonSerializer.Deserialize<JsonElement>(cookieValue);
-                    DeclarationType = settings.GetProperty("declarationType").GetString() ?? "class";
-                    AttributeMode = settings.GetProperty("attributeMode").GetString() ?? "system";
-                    UseNullableReferences = settings.GetProperty("useNullable").GetBoolean();
-                    UseList = settings.GetProperty("useList").GetBoolean();
+
+                    if (settings.TryGetProperty("declarationType", out var declarationType))
+                    {
+                        DeclarationType = declarationType.GetString() ?? DeclarationType;
+                    }
+
+                    if (settings.TryGetProperty("attributeMode", out var attributeMode))
+                    {
+                        AttributeMode = attributeMode.GetString() ?? AttributeMode;
+                    }
+
+                    if (settings.TryGetProperty("useNullable", out var useNullable))
+                    {
+                        UseNullableReferences = useNullable.GetBoolean();
+                    }
+
+                    if (settings.TryGetProperty("useList", out var useList))
+                    {
+                        UseList = useList.GetBoolean();
+                    }
+
+                    if (settings.TryGetProperty("namespace", out var namespaceValue))
+                    {
+                        Namespace = namespaceValue.GetString() ?? Namespace;
+                    }
+
+                    if (settings.TryGetProperty("rootClassName", out var rootClassName))
+                    {
+                        RootClassName = string.IsNullOrWhiteSpace(rootClassName.GetString()) ? "Root" : rootClassName.GetString()!;
+                    }
+
+                    if (settings.TryGetProperty("propertyStyle", out var propertyStyle))
+                    {
+                        PropertyStyle = propertyStyle.GetString() ?? PropertyStyle;
+                    }
+
+                    if (settings.TryGetProperty("classSuffix", out var classSuffix))
+                    {
+                        ClassSuffix = classSuffix.GetString() ?? ClassSuffix;
+                    }
                 }
             }
             catch
@@ -220,7 +282,11 @@
             declarationType = DeclarationType,
             attributeMode = AttributeMode,
             useNullable = UseNullableReferences,
-            useList = UseList
+            useList = UseList,
+            @namespace = Namespace,
+            rootClassName = RootClassName,
+            propertyStyle = PropertyStyle,
+            classSuffix = ClassSuffix
         };
 
         var json = JsonSerializer.Serialize(settings);
@@ -274,7 +340,8 @@
     {
         using var document = JsonDocument.Parse(JsonInput);
         var definitions = new List<ClassDefinition>();
-        var rootType = DetermineType(document.RootElement, "Root", definitions);
+        var rootName = string.IsNullOrWhiteSpace(RootClassName) ? "Root" : RootClassName;
+        var rootType = DetermineType(document.RootElement, rootName, definitions);
 
         var builder = new StringBuilder();
 
@@ -310,7 +377,7 @@
                     builder.AppendLine($"    [{attributeName}(\"{property.JsonName}\")]");
                 }
 
-                builder.AppendLine($"    public {property.Type} {property.Name} {{ get; set; }}");
+                builder.AppendLine($"    public {property.Type} {property.Name} {{ {PropertyStyle} }}");
             }
 
             builder.AppendLine("}");
@@ -323,7 +390,19 @@
         }
 
         _currentDefinitions = definitions;
-        return builder.ToString().TrimEnd();
+        var code = builder.ToString().TrimEnd();
+
+        if (!string.IsNullOrWhiteSpace(Namespace))
+        {
+            code = $"namespace {Namespace}\n{{\n{IndentLines(code, "    ")}\n}}";
+        }
+
+        return code;
+    }
+
+    private static string IndentLines(string value, string indent)
+    {
+        return string.Join("\n", value.Split('\n').Select(line => string.IsNullOrWhiteSpace(line) ? line : indent + line));
     }
 
     private string DetermineType(JsonElement element, string typeName, List<ClassDefinition> definitions)
@@ -338,7 +417,8 @@
 
     private string BuildObjectType(JsonElement element, string typeName, List<ClassDefinition> definitions)
     {
-        var uniqueName = GetUniqueTypeName(typeName, definitions);
+        var baseTypeName = string.IsNullOrWhiteSpace(ClassSuffix) ? typeName : typeName + ClassSuffix;
+        var uniqueName = GetUniqueTypeName(baseTypeName, definitions);
         var kind = DeclarationType == "record" ? "record" : "class";
         var definition = new ClassDefinition(uniqueName, kind);
 
