@@ -7,48 +7,50 @@
 
 <PageTitle>json2cs.dev</PageTitle>
 
-<div class="panel">
-    <h2>JSON input</h2>
-    <textarea @bind="JsonInput" @oninput="OnInputChanged" aria-label="JSON input"></textarea>
+<div class="layout-container">
+    <div class="panel divider">
+        <h2>JSON input</h2>
+        <textarea @bind="JsonInput" @oninput="OnInputChanged" aria-label="JSON input"></textarea>
 
-    <div class="options">
-        <div class="option-group">
-            <strong>Declaration</strong>
-            <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
-            <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
+        <div class="options">
+            <div class="option-group">
+                <strong>Declaration</strong>
+                <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
+                <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
+            </div>
+
+            <div class="option-group">
+                <strong>Attributes</strong>
+                <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
+                <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
+            </div>
+
+            <div class="option-group">
+                <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
+                <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
+            </div>
         </div>
 
-        <div class="option-group">
-            <strong>Attributes</strong>
-            <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
-            <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
+        <div class="action-row">
+            <button class="btn btn-primary" @onclick="Generate">Generate</button>
+            <button class="btn btn-secondary" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy code</button>
+            <span class="status">@StatusMessage</span>
         </div>
 
-        <div class="option-group">
-            <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
-            <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
-        </div>
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="error">@ErrorMessage</div>
+        }
     </div>
 
-    <div class="action-row">
-        <button class="btn btn-primary" @onclick="Generate">Generate</button>
-        <button class="btn btn-secondary" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy code</button>
-        <span class="status">@StatusMessage</span>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-    {
-        <div class="error">@ErrorMessage</div>
-    }
+    <section class="panel output-panel">
+        <div class="panel-header">
+            <h2>C# output</h2>
+            <button class="btn btn-plain" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy</button>
+        </div>
+        <pre class="code-block">@GeneratedCode</pre>
+    </section>
 </div>
-
-<section class="panel output-panel">
-    <div class="panel-header">
-        <h2>C# output</h2>
-        <button class="btn btn-plain" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy</button>
-    </div>
-    <pre class="code-block">@GeneratedCode</pre>
-</section>
 
 @code {
     private string JsonInput { get; set; } = @"{
@@ -140,6 +142,11 @@
 
             foreach (var property in definition.Properties)
             {
+                if (!string.IsNullOrEmpty(property.Comment))
+                {
+                    builder.AppendLine($"    // {property.Comment}");
+                }
+
                 if (property.NeedsJsonAttribute)
                 {
                     var attributeName = AttributeMode == "system" ? "JsonPropertyName" : "JsonProperty";
@@ -196,7 +203,7 @@
                 propertyName = "@" + propertyName;
             }
 
-            var propertyType = DetermineType(property.Value, propertyName + "Value", definitions);
+            var propertyType = DetermineType(property.Value, propertyName, definitions);
 
             if (UseNullableReferences && IsReferenceType(propertyType))
             {
@@ -204,7 +211,7 @@
             }
 
             var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
-            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute));
+            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, null));
         }
 
         definitions.Add(definition);
@@ -214,21 +221,24 @@
     private string BuildArrayType(JsonElement element, string typeName, List<ClassDefinition> definitions)
     {
         var itemType = "object";
+        var isEmpty = true;
 
         foreach (var item in element.EnumerateArray())
         {
+            isEmpty = false;
             if (item.ValueKind == JsonValueKind.Null)
             {
                 continue;
             }
 
-            itemType = DetermineType(item, typeName + "Item", definitions);
+            var singularName = ToSingular(typeName);
+            itemType = DetermineType(item, singularName, definitions);
             break;
         }
 
-        if (itemType == "object")
+        if (isEmpty)
         {
-            itemType = "object";
+            itemType = "object /* Typ unbekannt - leeres Array */";
         }
 
         return UseList ? $"List<{itemType}>" : $"{itemType}[]";
@@ -241,7 +251,7 @@
             JsonValueKind.String => "string",
             JsonValueKind.Number => element.TryGetInt32(out _) ? "int" : element.TryGetInt64(out _) ? "long" : "double",
             JsonValueKind.True or JsonValueKind.False => "bool",
-            JsonValueKind.Null => "object",
+            JsonValueKind.Null => "JsonElement",
             _ => "object",
         };
     }
@@ -324,5 +334,23 @@
         public List<PropertyDefinition> Properties { get; } = new();
     }
 
-    private sealed record PropertyDefinition(string JsonName, string Name, string Type, bool NeedsJsonAttribute);
+    private sealed record PropertyDefinition(string JsonName, string Name, string Type, bool NeedsJsonAttribute, string? Comment);
+
+    private static string ToSingular(string word)
+    {
+        if (string.IsNullOrEmpty(word))
+            return word;
+
+        // Entfernt "s" am Ende für einfache Pluralisierungen
+        if (word.EndsWith("ies", StringComparison.Ordinal))
+            return word[..^3] + "y";
+        
+        if (word.EndsWith("es", StringComparison.Ordinal) && !word.EndsWith("ss", StringComparison.Ordinal))
+            return word[..^2];
+        
+        if (word.EndsWith("s", StringComparison.Ordinal) && !word.EndsWith("ss", StringComparison.Ordinal))
+            return word[..^1];
+
+        return word;
+    }
 }

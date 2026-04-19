@@ -23,79 +23,448 @@ button {
     font: inherit;
 }
 
+/* ===== APP SHELL ===== */
 .app-shell {
     display: flex;
     min-height: 100vh;
     flex-direction: column;
 }
 
+/* ===== HEADER ===== */
 .app-header {
-    padding: 1.5rem 1.5rem 0.5rem;
-    background: white;
-    box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06);
+    background: #1A80B6;
+    color: white;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+}
+
+.header-left {
+    flex: 1;
 }
 
 .brand h1 {
     margin: 0;
-    font-size: clamp(1.75rem, 2.8vw, 2.5rem);
-    letter-spacing: -0.04em;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
 
 .brand p {
-    margin: 0.5rem 0 0;
-    color: #475569;
+    margin: 0.25rem 0 0;
+    font-size: 0.95rem;
+    opacity: 0.95;
 }
 
-.app-content {
-    flex: 1;
-    width: min(1200px, calc(100% - 2rem));
-    margin: 0 auto 2rem;
-    padding: 1.5rem 0 0;
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
 }
 
-.app-footer {
-    padding: 1rem 1.5rem 1.5rem;
-    text-align: center;
-    color: #64748b;
+.github-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s;
+    font-weight: 500;
     font-size: 0.95rem;
 }
 
-.grid {
-    display: grid;
-    gap: 1.5rem;
-    grid-template-columns: 1.2fr 0.8fr;
+.github-link:hover {
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
+.github-link svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ===== MAIN CONTENT ===== */
+.app-content {
+    flex: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 2rem 1.5rem;
+}
+
+/* ===== TWO COLUMN LAYOUT ===== */
+.layout-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    min-height: 600px;
+}
+
+.layout-container > * {
+    min-height: 600px;
+}
+
+.divider {
+    border-right: 2px solid #e2e8f0;
+}
+
+/* ===== PANELS ===== */
 .panel {
     background: white;
     border: 1px solid #e2e8f0;
-    border-radius: 1rem;
+    border-radius: 0.75rem;
     padding: 1.5rem;
-    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .panel h2 {
-    margin-top: 0;
+    margin: 0 0 1rem;
     font-size: 1.25rem;
+    color: #1A80B6;
 }
 
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.panel-header h2 {
+    margin: 0;
+}
+
+.output-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.code-block {
+    flex: 1;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    overflow-y: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #1e293b;
+}
+
+/* ===== TEXTAREA ===== */
 textarea {
     width: 100%;
-    min-height: 280px;
+    flex: 1;
     border: 1px solid #cbd5e1;
-    border-radius: 0.85rem;
+    border-radius: 0.5rem;
     padding: 1rem;
-    resize: vertical;
+    resize: none;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     color: #0f172a;
     background: #f8fafc;
+    line-height: 1.5;
 }
 
 textarea:focus {
     outline: none;
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 0.15rem rgba(56, 189, 248, 0.25);
+    border-color: #1A80B6;
+    box-shadow: 0 0 0 3px rgba(26, 128, 182, 0.1);
+}
+
+/* ===== BUTTONS & CONTROLS ===== */
+.btn {
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    padding: 0.625rem 1rem;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: #1A80B6;
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #146691;
+}
+
+.btn-secondary {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #cbd5e1;
+}
+
+.btn-plain {
+    background: transparent;
+    color: #1A80B6;
+    border: 1px solid #e2e8f0;
+}
+
+.btn-plain:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #1A80B6;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.option-group strong {
+    font-size: 0.9rem;
+    color: #475569;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.option-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.option-group input[type="radio"],
+.option-group input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* ===== ACTION ROW ===== */
+.action-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 1.5rem;
+}
+
+.status {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-left: 1rem;
+}
+
+.error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 1rem;
+    font-size: 0.95rem;
+}
+
+/* ===== FOOTER ===== */
+.app-footer {
+    background: #f1f5f9;
+    border-top: 1px solid #e2e8f0;
+    padding: 2rem 1.5rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.footer-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+    flex: 1;
+}
+
+.footer-center {
+    text-align: center;
+}
+
+.footer-right {
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1.5rem;
+}
+
+.footer-right a {
+    color: #1A80B6;
+    text-decoration: none;
+}
+
+.footer-right a:hover {
+    text-decoration: underline;
+}
+
+/* ===== LEGAL PAGES ===== */
+.legal-page {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.legal-page h1 {
+    color: #1A80B6;
+    margin-top: 0;
+    border-bottom: 2px solid #1A80B6;
+    padding-bottom: 1rem;
+}
+
+.legal-page h2 {
+    color: #1A80B6;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+.legal-page p {
+    line-height: 1.6;
+    color: #0f172a;
+}
+
+.legal-page a {
+    color: #1A80B6;
+    text-decoration: none;
+}
+
+.legal-page a:hover {
+    text-decoration: underline;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #1A80B6;
+    text-decoration: none;
+    margin-bottom: 2rem;
+    font-weight: 500;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+    /* Stack layout vertically on mobile */
+    .layout-container {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .layout-container > * {
+        min-height: auto;
+    }
+
+    .divider {
+        border-right: none;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Header adjustments */
+    .header-container {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .brand h1 {
+        font-size: 1.5rem;
+    }
+
+    .brand p {
+        font-size: 0.85rem;
+    }
+
+    .github-link {
+        margin-left: auto;
+    }
+
+    /* Footer adjustments */
+    .footer-container {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.5rem;
+    }
+
+    .footer-left,
+    .footer-center,
+    .footer-right {
+        text-align: center;
+    }
+
+    .footer-right {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    /* Panel adjustments */
+    .panel {
+        min-height: 400px;
+    }
+
+    /* Legal pages */
+    .legal-page {
+        padding: 1.5rem;
+    }
+
+    .action-row {
+        flex-wrap: wrap;
+    }
+
+    .status {
+        margin-left: 0;
+        width: 100%;
+    }
 }
 
 .options {
