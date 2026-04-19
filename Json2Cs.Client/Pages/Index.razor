@@ -60,7 +60,7 @@
     <section class="panel output-panel">
         <div class="panel-header">
             <span class="panel-title">C# Output</span>
-            <button class="copy-btn @( _isCopied ? "copied" : "" )" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)" title="In Zwischenablage kopieren">
+            <button class="copy-btn @( _isCopied ? "copied" : "" )" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)" title="Copy to clipboard">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                 </svg>
@@ -143,12 +143,12 @@
             
             // Initialize C# editor (read-only)
             _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", 
-                string.IsNullOrWhiteSpace(GeneratedCode) ? "// C# Klassen erscheinen hier automatisch..." : GeneratedCode, "csharp", false);
+                string.IsNullOrWhiteSpace(GeneratedCode) ? "// C# classes appear here automatically..." : GeneratedCode, "csharp", false);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to initialize Monaco editors: {ex.Message}");
-            InitializationError = "Editor konnte nicht initialisiert werden. Bitte Seite neu laden.";
+            InitializationError = "The editor could not be initialised. Please reload the page.";
             StateHasChanged();
         }
     }
@@ -206,7 +206,7 @@
 
             if (_csharpEditor != null)
             {
-                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# Klassen erscheinen hier automatisch...");
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# classes appear here automatically...");
             }
 
             return;
@@ -216,7 +216,7 @@
         {
             ErrorMessage = string.Empty;
             GeneratedCode = BuildCode();
-            StatusMessage = $"{GetClassCount()} Klassen • {GetPropertyCount()} Properties • {GetLineCount()} Zeilen";
+            StatusMessage = $"{GetClassCount()} Classes • {GetPropertyCount()} Properties • {GetLineCount()} Lines";
             JS.InvokeVoidAsync("updateStatusDisplay", StatusMessage);
             
             if (_csharpEditor != null)
@@ -234,7 +234,7 @@
             
             if (_csharpEditor != null)
             {
-                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# Klassen erscheinen hier automatisch...");
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# classes appear here automatically...");
             }
         }
     }

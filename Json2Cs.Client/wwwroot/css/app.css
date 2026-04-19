@@ -45,11 +45,12 @@ html, body {
 
 /* ===== HEADER ===== */
 .app-header {
-    height: 56px;
+    height: 60px;
     flex-shrink: 0;
     background: #1A80B6;
     color: white;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    padding: 8px 16px;
 }
 
 .app-header * {
@@ -358,12 +359,13 @@ html, body {
 
 /* ===== COPY BUTTON ===== */
 .copy-btn {
-    background: none;
+    background: #1A80B6;
     border: none;
     color: #CCCCCC;
+    height: 26px;
     cursor: pointer;
     padding: 0.25rem;
-    border-radius: 3px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
