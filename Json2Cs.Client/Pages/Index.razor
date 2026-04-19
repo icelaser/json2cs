@@ -9,30 +9,36 @@
 <PageTitle>json2cs.dev</PageTitle>
 
 <div class="layout-container">
-    <aside class="settings-panel">
-        <div class="settings-header">Settings</div>
-        <div class="options">
-            <div class="option-group">
-                <strong>Declaration</strong>
-                <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
-                <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
-            </div>
+    <aside class="settings-panel @(SettingsCollapsed ? "collapsed" : "")">
+        <button class="settings-toggle" @onclick="ToggleSettings" title="@(SettingsCollapsed ? "Settings aufklappen" : "Settings einklappen")">
+            <span class="settings-toggle-icon">@(SettingsCollapsed ? "⚙" : "☰")</span>
+            <span class="settings-toggle-text">Settings</span>
+        </button>
+        <div class="settings-content">
+            <div class="settings-header">Settings</div>
+            <div class="options">
+                <div class="option-group">
+                    <strong>Declaration</strong>
+                    <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "class"; Generate(); })" /> class</label>
+                    <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "record"; Generate(); })" /> record</label>
+                </div>
 
-            <div class="option-group">
-                <strong>Attributes</strong>
-                <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
-                <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
-            </div>
+                <div class="option-group">
+                    <strong>Attributes</strong>
+                    <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "system"; Generate(); })" /> System.Text.Json</label>
+                    <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "newtonsoft"; Generate(); })" /> Newtonsoft.Json</label>
+                </div>
 
-            <div class="option-group">
-                <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable</label>
-                <label><input type="checkbox" @bind="UseList" /> List&lt;T&gt;</label>
+                <div class="option-group">
+                    <label><input type="checkbox" checked="@UseNullableReferences" @onchange="@(e => { UseNullableReferences = (bool)(e.Value ?? false); Generate(); })" /> Nullable</label>
+                    <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); })" /> List&lt;T&gt;</label>
+                </div>
             </div>
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+            {
+                <div class="error-indicator">Ungültiges JSON</div>
+            }
         </div>
-        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-        {
-            <div class="error-indicator">Ungültiges JSON</div>
-        }
     </aside>
 
     <section class="panel json-panel">
@@ -79,6 +85,7 @@
     private string GeneratedCode { get; set; } = string.Empty;
     private string? ErrorMessage { get; set; }
     private string StatusMessage { get; set; } = "Ready.";
+    private bool SettingsCollapsed { get; set; } = true;
 
     private System.Timers.Timer? _debounceTimer;
     private IJSObjectReference? _jsonEditor;
@@ -93,6 +100,7 @@
         {
             await InitializeMonacoEditors();
             Generate();
+            await JS.InvokeVoidAsync("updateStatusDisplay", StatusMessage);
         }
     }
 
@@ -197,7 +205,8 @@
         {
             ErrorMessage = string.Empty;
             GeneratedCode = BuildCode();
-            StatusMessage = "Generated successfully.";
+            StatusMessage = $"{GetClassCount()} Klassen • {GetPropertyCount()} Properties • {GetLineCount()} Zeilen";
+            JS.InvokeVoidAsync("updateStatusDisplay", StatusMessage);
             
             if (_csharpEditor != null)
             {
@@ -210,6 +219,7 @@
             _currentDefinitions.Clear();
             ErrorMessage = ex.Message;
             StatusMessage = string.Empty;
+            JS.InvokeVoidAsync("updateStatusDisplay", "Ready.");
             
             if (_csharpEditor != null)
             {
@@ -490,6 +500,12 @@
             return word[..^1];  // roles → role, users → user, items → item, addresses → address
         
         return word;  // unverändert für Wörter die nicht auf s enden oder Sonderfälle
+    }
+
+    private void ToggleSettings()
+    {
+        SettingsCollapsed = !SettingsCollapsed;
+        StateHasChanged();
     }
 
     public void Dispose()

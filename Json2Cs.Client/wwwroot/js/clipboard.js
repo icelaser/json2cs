@@ -8,6 +8,13 @@ window.copyToClipboard = (text) => {
     });
 };
 
+window.updateStatusDisplay = (message) => {
+    const statusElement = document.getElementById('status-display');
+    if (statusElement) {
+        statusElement.textContent = message;
+    }
+};
+
 // Monaco Editor initialization
 window.initializeMonacoEditor = async (containerId, initialValue, language, editable, dotnetRef) => {
     return new Promise((resolve) => {
