@@ -9,7 +9,7 @@ window.copyToClipboard = (text) => {
 };
 
 // Monaco Editor initialization
-window.initializeMonacoEditor = async (containerId, initialValue, language, editable) => {
+window.initializeMonacoEditor = async (containerId, initialValue, language, editable, dotnetRef) => {
     return new Promise((resolve) => {
         const checkMonaco = () => {
             if (window.monaco) {
@@ -20,8 +20,13 @@ window.initializeMonacoEditor = async (containerId, initialValue, language, edit
                     return;
                 }
 
+                const placeholder = document.createElement('div');
+                placeholder.className = 'editor-placeholder';
+                placeholder.textContent = language === 'json' ? '// JSON hier einfügen...' : '';
+                container.appendChild(placeholder);
+
                 const editor = monaco.editor.create(container, {
-                    value: initialValue,
+                    value: initialValue || '',
                     language: language,
                     theme: 'vs-dark',
                     fontSize: 14,
@@ -39,13 +44,22 @@ window.initializeMonacoEditor = async (containerId, initialValue, language, edit
                     }
                 });
 
-                if (editable) {
-                    // For JSON editor, listen to changes and call C# method
-                    editor.onDidChangeModelContent(() => {
+                const updatePlaceholder = () => {
+                    if (language === 'json') {
+                        placeholder.style.display = editor.getValue().length === 0 ? 'block' : 'none';
+                    } else {
+                        placeholder.style.display = 'none';
+                    }
+                };
+
+                updatePlaceholder();
+                editor.onDidChangeModelContent(() => {
+                    updatePlaceholder();
+                    if (editable && dotnetRef) {
                         const value = editor.getValue();
-                        DotNet.invokeMethodAsync('Json2Cs.Client', 'OnJsonInputChanged', value);
-                    });
-                }
+                        dotnetRef.invokeMethodAsync('OnJsonChanged', value);
+                    }
+                });
 
                 resolve({
                     dispose: () => editor.dispose(),

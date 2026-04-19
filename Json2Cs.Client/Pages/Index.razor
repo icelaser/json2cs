@@ -4,39 +4,53 @@
 @using System.Text.Json.Serialization
 @using System.Text.RegularExpressions
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>json2cs.dev</PageTitle>
 
 <div class="layout-container">
-    <div class="panel divider">
-        <div class="toolbar">
-            <h2>JSON Input</h2>
-            <div class="options">
-                <div class="option-group">
-                    <strong>Declaration</strong>
-                    <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
-                    <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
-                </div>
+    <aside class="settings-panel">
+        <div class="settings-header">Settings</div>
+        <div class="options">
+            <div class="option-group">
+                <strong>Declaration</strong>
+                <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
+                <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
+            </div>
 
-                <div class="option-group">
-                    <strong>Attributes</strong>
-                    <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
-                    <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
-                </div>
+            <div class="option-group">
+                <strong>Attributes</strong>
+                <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
+                <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
+            </div>
 
-                <div class="option-group">
-                    <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
-                    <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
-                </div>
+            <div class="option-group">
+                <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable</label>
+                <label><input type="checkbox" @bind="UseList" /> List&lt;T&gt;</label>
             </div>
         </div>
-        <div class="editor-container" id="json-editor"></div>
-    </div>
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="error-indicator">Ungültiges JSON</div>
+        }
+    </aside>
+
+    <section class="panel json-panel">
+        <div class="panel-header">
+            <span class="panel-title">JSON Input</span>
+            <button class="btn btn-primary" @onclick="Generate">Generate</button>
+        </div>
+        <div class="editor-container json-input @(string.IsNullOrWhiteSpace(ErrorMessage) ? "" : "json-error")" id="json-editor"></div>
+    </section>
 
     <section class="panel output-panel">
-        <div class="toolbar">
-            <h2>C# Output</h2>
-            <button class="btn btn-plain" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy</button>
+        <div class="panel-header">
+            <span class="panel-title">C# Output</span>
+            <button class="copy-btn @( _isCopied ? "copied" : "" )" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)" title="In Zwischenablage kopieren">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+            </button>
         </div>
         <div class="editor-container" id="csharp-editor"></div>
     </section>
@@ -69,6 +83,9 @@
     private System.Timers.Timer? _debounceTimer;
     private IJSObjectReference? _jsonEditor;
     private IJSObjectReference? _csharpEditor;
+    private DotNetObjectReference<Index>? _dotNetRef;
+    private bool _isCopied = false;
+    private List<ClassDefinition> _currentDefinitions = new();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -101,11 +118,15 @@
             // Wait for Monaco to load
             await Task.Delay(1000);
 
+            // Create DotNet reference for Monaco callbacks
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+
             // Initialize JSON editor
-            _jsonEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "json-editor", JsonInput, "json", true);
+            _jsonEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "json-editor", JsonInput, "json", true, _dotNetRef);
             
             // Initialize C# editor (read-only)
-            _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", GeneratedCode, "csharp", false);
+            _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", 
+                string.IsNullOrWhiteSpace(GeneratedCode) ? "// C# Klassen erscheinen hier automatisch..." : GeneratedCode, "csharp", false);
         }
         catch (Exception ex)
         {
@@ -114,9 +135,10 @@
     }
 
     [JSInvokable]
-    public void OnJsonInputChanged(string value)
+    public Task OnJsonChanged(string value)
     {
         OnJsonInputChangedInternal(value);
+        return Task.CompletedTask;
     }
 
     private void OnJsonInputChangedInternal(string value)
@@ -146,19 +168,37 @@
         }
 
         await JS.InvokeVoidAsync("copyToClipboard", GeneratedCode);
-        StatusMessage = "Copied to clipboard.";
+        _isCopied = true;
+        StateHasChanged();
+        
+        // Reset after 2 seconds
+        await Task.Delay(2000);
+        _isCopied = false;
         StateHasChanged();
     }
 
     private void Generate()
     {
+        if (string.IsNullOrWhiteSpace(JsonInput))
+        {
+            ErrorMessage = string.Empty;
+            GeneratedCode = string.Empty;
+            _currentDefinitions.Clear();
+
+            if (_csharpEditor != null)
+            {
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# Klassen erscheinen hier automatisch...");
+            }
+
+            return;
+        }
+
         try
         {
             ErrorMessage = string.Empty;
             GeneratedCode = BuildCode();
             StatusMessage = "Generated successfully.";
             
-            // Update C# editor if available
             if (_csharpEditor != null)
             {
                 JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, GeneratedCode);
@@ -167,13 +207,13 @@
         catch (Exception ex)
         {
             GeneratedCode = string.Empty;
-            ErrorMessage = $"Invalid JSON: {ex.Message}";
+            _currentDefinitions.Clear();
+            ErrorMessage = ex.Message;
             StatusMessage = string.Empty;
             
-            // Update C# editor with error
             if (_csharpEditor != null)
             {
-                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// Error: " + ex.Message);
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# Klassen erscheinen hier automatisch...");
             }
         }
     }
@@ -230,6 +270,7 @@
             builder.AppendLine($"// Unable to generate types for root type: {rootType}");
         }
 
+        _currentDefinitions = definitions;
         return builder.ToString().TrimEnd();
     }
 
@@ -421,13 +462,49 @@
         if (string.IsNullOrEmpty(word))
             return word;
 
-        // Englische Pluralregeln
-        if (word.EndsWith("ies", StringComparison.Ordinal))
-            return word[..^3] + "y";  // categories → category
+        // Englische Pluralregeln - von spezifisch zu allgemein
+        if (word.EndsWith("ies", StringComparison.OrdinalIgnoreCase) && word.Length > 3)
+            return word[..^3] + "y";  // categories → category, companies → company
         
-        if (word.EndsWith("s", StringComparison.Ordinal) && !word.EndsWith("ss", StringComparison.Ordinal))
-            return word[..^1];  // roles → role, users → user, aber nicht access → access
+        if (word.EndsWith("ves", StringComparison.OrdinalIgnoreCase) && word.Length > 3)
+            return word[..^3] + "f";  // leaves → leaf, knives → knife (vereinfacht)
         
-        return word;  // unverändert für Wörter die nicht auf s enden
+        if (word.EndsWith("es", StringComparison.OrdinalIgnoreCase) && word.Length > 2)
+        {
+            // Spezielle Fälle für -es
+            if (word.EndsWith("ches", StringComparison.OrdinalIgnoreCase) ||
+                word.EndsWith("shes", StringComparison.OrdinalIgnoreCase) ||
+                word.EndsWith("sses", StringComparison.OrdinalIgnoreCase) ||
+                word.EndsWith("xes", StringComparison.OrdinalIgnoreCase))
+                return word[..^2];  // churches → church, bushes → bush, etc.
+            
+            if (word.EndsWith("oes", StringComparison.OrdinalIgnoreCase))
+                return word[..^2];  // heroes → hero
+            
+            // Reguläre -es Endungen
+            return word[..^1];  // addresses → address, boxes → box
+        }
+        
+        if (word.EndsWith("s", StringComparison.OrdinalIgnoreCase) && word.Length > 1 && 
+            !word.EndsWith("ss", StringComparison.OrdinalIgnoreCase))
+            return word[..^1];  // roles → role, users → user, items → item, addresses → address
+        
+        return word;  // unverändert für Wörter die nicht auf s enden oder Sonderfälle
     }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+        _dotNetRef?.Dispose();
+    }
+
+    private int GetClassCount() => _currentDefinitions.Count;
+    
+    private int GetPropertyCount() => _currentDefinitions.Sum(d => d.Properties.Count);
+    
+    private int GetLineCount() => string.IsNullOrWhiteSpace(GeneratedCode) ? 0 : GeneratedCode.Split('\n').Length;
+    
+    private bool HasUnknownTypes() => _currentDefinitions.Any(d => d.Properties.Any(p => p.Type.Contains("object") || p.Type.Contains("?")));
+    
+    private int GetUnknownTypeCount() => _currentDefinitions.Sum(d => d.Properties.Count(p => p.Type.Contains("object") || (p.Type.Contains("?") && !p.Type.StartsWith("string"))));
 }
