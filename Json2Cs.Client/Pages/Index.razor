@@ -25,21 +25,21 @@
             <div class="options">
                 <strong>Declaration</strong>
                 <div class="option-group">
-                    <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "class"; Generate(); })" /> class</label>
-                    <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "record"; Generate(); })" /> record</label>
+                    <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "class"; Generate(); _ = SaveSettingsToCookie(); })" /> class</label>
+                    <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "record"; Generate(); _ = SaveSettingsToCookie(); })" /> record</label>
                 </div>
 
                 <strong>Attributes</strong>
                 <div class="option-group">
-                    <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "system"; Generate(); })" /> System.Text.Json</label>
-                    <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "newtonsoft"; Generate(); })" /> Newtonsoft.Json</label>
+                    <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "system"; Generate(); _ = SaveSettingsToCookie(); })" /> System.Text.Json</label>
+                    <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => { AttributeMode = e.Value?.ToString() ?? "newtonsoft"; Generate(); _ = SaveSettingsToCookie(); })" /> Newtonsoft.Json</label>
                 </div>
 
                 <div class="option-group">
-                    <label><input type="checkbox" checked="@UseNullableReferences" @onchange="@(e => { UseNullableReferences = (bool)(e.Value ?? false); Generate(); })" /> Nullable</label>
+                    <label><input type="checkbox" checked="@UseNullableReferences" @onchange="@(e => { UseNullableReferences = (bool)(e.Value ?? false); Generate(); _ = SaveSettingsToCookie(); })" /> Nullable</label>
                 </div>
                 <div class="option-group">
-                    <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); })" /> List&lt;T&gt;</label>
+                    <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); _ = SaveSettingsToCookie(); })" /> List&lt;T&gt;</label>
                 </div>
             </div>
             @if (!string.IsNullOrWhiteSpace(ErrorMessage))
@@ -107,6 +107,23 @@
     {
         if (firstRender)
         {
+            try
+            {
+                var cookieValue = await JS.InvokeAsync<string>("getCookie", "json2cs_settings");
+                if (!string.IsNullOrEmpty(cookieValue))
+                {
+                    var settings = JsonSerializer.Deserialize<JsonElement>(cookieValue);
+                    DeclarationType = settings.GetProperty("declarationType").GetString() ?? "class";
+                    AttributeMode = settings.GetProperty("attributeMode").GetString() ?? "system";
+                    UseNullableReferences = settings.GetProperty("useNullable").GetBoolean();
+                    UseList = settings.GetProperty("useList").GetBoolean();
+                }
+            }
+            catch
+            {
+                // ignore invalid cookie content
+            }
+
             await InitializeMonacoEditors();
             Generate();
             await JS.InvokeVoidAsync("updateStatusDisplay", StatusMessage);
@@ -194,6 +211,20 @@
         await Task.Delay(2000);
         _isCopied = false;
         StateHasChanged();
+    }
+
+    private async Task SaveSettingsToCookie()
+    {
+        var settings = new
+        {
+            declarationType = DeclarationType,
+            attributeMode = AttributeMode,
+            useNullable = UseNullableReferences,
+            useList = UseList
+        };
+
+        var json = JsonSerializer.Serialize(settings);
+        await JS.InvokeVoidAsync("setCookie", "json2cs_settings", json, 365);
     }
 
     private void Generate()
