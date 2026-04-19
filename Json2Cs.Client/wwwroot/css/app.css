@@ -413,8 +413,7 @@ html, body {
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-right: 0.5rem;
-
-.option-group label {
+}
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -517,33 +516,6 @@ html, body {
 
 .app-footer a:hover {
   text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-    html, body {
-        overflow: auto;
-    }
-
-    .app-content {
-        overflow: auto;
-    }
-
-    .layout-container {
-        flex-direction: column;
-        overflow-y: auto;
-    }
-
-    .settings-panel {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid #3E3E3E;
-    }
-
-    .panel.json-panel,
-    .output-panel {
-        height: 40vh;
-        min-height: 0;
-    }
 }
 
 /* ===== LEGAL PAGES ===== */
@@ -652,111 +624,4 @@ html, body {
   .footer-center {
     display: none;
   }
-}
-
-.options {
-    display: grid;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-.option-group {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.option-group label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
-    cursor: pointer;
-    color: #334155;
-}
-
-input[type="radio"], input[type="checkbox"] {
-    accent-color: #38bdf8;
-}
-
-.action-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
-}
-
-.btn {
-    border: none;
-    border-radius: 0.75rem;
-    padding: 0.85rem 1.2rem;
-    cursor: pointer;
-    font-weight: 600;
-}
-
-.btn-primary {
-    background: #0ea5e9;
-    color: white;
-}
-
-.btn-secondary {
-    background: #e2e8f0;
-    color: #0f172a;
-}
-
-.btn-plain {
-    background: #f8fafc;
-    color: #0f172a;
-    border: 1px solid #cbd5e1;
-    border-radius: 0.75rem;
-    padding: 0.75rem 1rem;
-}
-
-.status {
-    color: #475569;
-    font-size: 0.95rem;
-}
-
-.output-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 100%;
-}
-
-.panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-}
-
-.code-block {
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: #0f172a;
-    color: #f8fafc;
-    border-radius: 0.85rem;
-    padding: 1rem;
-    margin-top: 1rem;
-    overflow: auto;
-    font-size: 0.92rem;
-    line-height: 1.55;
-}
-
-.error {
-    margin-top: 1rem;
-    padding: 1rem 1.2rem;
-    border-radius: 0.85rem;
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-}
-
-@media (max-width: 960px) {
-    .grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
 }
