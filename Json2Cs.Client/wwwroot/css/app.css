@@ -178,17 +178,17 @@ html, body {
 }
 
 .settings-toggle-icon {
-    font-size: 12px;
+    font-size: 16px;
     line-height: 1;
 }
 
 .settings-toggle-text {
-    font-size: 8px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     writing-mode: vertical-rl;
     text-orientation: mixed;
-    transform: rotate(180deg);
+    transform: rotate(0deg);
 }
 
 .settings-panel.collapsed .settings-toggle-text {
@@ -239,7 +239,7 @@ html, body {
 
 .panel-title {
     color: #FFFFFF;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
 }
 
