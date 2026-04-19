@@ -9,46 +9,36 @@
 
 <div class="layout-container">
     <div class="panel divider">
-        <h2>JSON input</h2>
-        <textarea @bind="JsonInput" @oninput="OnInputChanged" aria-label="JSON input"></textarea>
+        <div class="toolbar">
+            <h2>JSON Input</h2>
+            <div class="options">
+                <div class="option-group">
+                    <strong>Declaration</strong>
+                    <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
+                    <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
+                </div>
 
-        <div class="options">
-            <div class="option-group">
-                <strong>Declaration</strong>
-                <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "class")" /> class</label>
-                <label><input type="radio" name="declaration" value="record" checked="@(DeclarationType == "record")" @onchange="@(e => DeclarationType = e.Value?.ToString() ?? "record")" /> record</label>
-            </div>
+                <div class="option-group">
+                    <strong>Attributes</strong>
+                    <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
+                    <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
+                </div>
 
-            <div class="option-group">
-                <strong>Attributes</strong>
-                <label><input type="radio" name="attributes" value="system" checked="@(AttributeMode == "system")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "system")" /> System.Text.Json</label>
-                <label><input type="radio" name="attributes" value="newtonsoft" checked="@(AttributeMode == "newtonsoft")" @onchange="@(e => AttributeMode = e.Value?.ToString() ?? "newtonsoft")" /> Newtonsoft.Json</label>
-            </div>
-
-            <div class="option-group">
-                <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
-                <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
+                <div class="option-group">
+                    <label><input type="checkbox" @bind="UseNullableReferences" /> Nullable Reference Types</label>
+                    <label><input type="checkbox" @bind="UseList" /> Use List&lt;T&gt; instead of array</label>
+                </div>
             </div>
         </div>
-
-        <div class="action-row">
-            <button class="btn btn-primary" @onclick="Generate">Generate</button>
-            <button class="btn btn-secondary" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy code</button>
-            <span class="status">@StatusMessage</span>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-        {
-            <div class="error">@ErrorMessage</div>
-        }
+        <div class="editor-container" id="json-editor"></div>
     </div>
 
     <section class="panel output-panel">
-        <div class="panel-header">
-            <h2>C# output</h2>
+        <div class="toolbar">
+            <h2>C# Output</h2>
             <button class="btn btn-plain" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)">Copy</button>
         </div>
-        <pre class="code-block">@GeneratedCode</pre>
+        <div class="editor-container" id="csharp-editor"></div>
     </section>
 </div>
 
@@ -60,7 +50,7 @@
   ""roles"": [""admin"", ""editor""],
   ""profile"": {
     ""email"": ""anna@example.com"",
-    ""created_at"": ""2026-04-19T12:34:56Z"",
+    ""created_at"": ""2026-04-19T10:15:30Z"",
     ""settings"": {
       ""newsletter_opt_in"": false,
       ""theme"": ""dark""
@@ -76,14 +66,76 @@
     private string? ErrorMessage { get; set; }
     private string StatusMessage { get; set; } = "Ready.";
 
-    protected override void OnInitialized()
+    private System.Timers.Timer? _debounceTimer;
+    private IJSObjectReference? _jsonEditor;
+    private IJSObjectReference? _csharpEditor;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        Generate();
+        if (firstRender)
+        {
+            await InitializeMonacoEditors();
+            Generate();
+        }
     }
 
-    private void OnInputChanged(ChangeEventArgs e)
+    private async Task InitializeMonacoEditors()
     {
-        Generate();
+        try
+        {
+            // Load Monaco Editor
+            await JS.InvokeVoidAsync("eval", @"
+                if (!window.require) {
+                    var script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/monaco-editor/min/vs/loader.js';
+                    script.onload = function() {
+                        require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor/min/vs' } });
+                        require(['vs/editor/editor.main'], function() {
+                            window.monacoLoaded = true;
+                        });
+                    };
+                    document.head.appendChild(script);
+                }
+            ");
+
+            // Wait for Monaco to load
+            await Task.Delay(1000);
+
+            // Initialize JSON editor
+            _jsonEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "json-editor", JsonInput, "json", true);
+            
+            // Initialize C# editor (read-only)
+            _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", GeneratedCode, "csharp", false);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to initialize Monaco editors: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public void OnJsonInputChanged(string value)
+    {
+        OnJsonInputChangedInternal(value);
+    }
+
+    private void OnJsonInputChangedInternal(string value)
+    {
+        JsonInput = value;
+        
+        // Debounce the generation
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += (sender, e) => {
+            InvokeAsync(() => {
+                Generate();
+                StateHasChanged();
+            });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
     }
 
     private async Task CopyCode()
@@ -95,6 +147,7 @@
 
         await JS.InvokeVoidAsync("copyToClipboard", GeneratedCode);
         StatusMessage = "Copied to clipboard.";
+        StateHasChanged();
     }
 
     private void Generate()
@@ -104,12 +157,24 @@
             ErrorMessage = string.Empty;
             GeneratedCode = BuildCode();
             StatusMessage = "Generated successfully.";
+            
+            // Update C# editor if available
+            if (_csharpEditor != null)
+            {
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, GeneratedCode);
+            }
         }
         catch (Exception ex)
         {
             GeneratedCode = string.Empty;
             ErrorMessage = $"Invalid JSON: {ex.Message}";
             StatusMessage = string.Empty;
+            
+            // Update C# editor with error
+            if (_csharpEditor != null)
+            {
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// Error: " + ex.Message);
+            }
         }
     }
 
@@ -246,14 +311,29 @@
 
     private string MapPrimitiveType(JsonElement element)
     {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var strValue = element.GetString();
+            if (!string.IsNullOrEmpty(strValue) && IsIsoDateTime(strValue))
+            {
+                return "DateTimeOffset";
+            }
+            return "string";
+        }
+
         return element.ValueKind switch
         {
-            JsonValueKind.String => "string",
             JsonValueKind.Number => element.TryGetInt32(out _) ? "int" : element.TryGetInt64(out _) ? "long" : "double",
             JsonValueKind.True or JsonValueKind.False => "bool",
             JsonValueKind.Null => "JsonElement",
             _ => "object",
         };
+    }
+
+    private static bool IsIsoDateTime(string value)
+    {
+        // ISO-8601 Pattern: 2026-04-19T10:15:30Z etc.
+        return Regex.IsMatch(value, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}");
     }
 
     private string GetUniqueTypeName(string baseName, List<ClassDefinition> definitions)
@@ -341,16 +421,13 @@
         if (string.IsNullOrEmpty(word))
             return word;
 
-        // Entfernt "s" am Ende für einfache Pluralisierungen
+        // Englische Pluralregeln
         if (word.EndsWith("ies", StringComparison.Ordinal))
-            return word[..^3] + "y";
-        
-        if (word.EndsWith("es", StringComparison.Ordinal) && !word.EndsWith("ss", StringComparison.Ordinal))
-            return word[..^2];
+            return word[..^3] + "y";  // categories → category
         
         if (word.EndsWith("s", StringComparison.Ordinal) && !word.EndsWith("ss", StringComparison.Ordinal))
-            return word[..^1];
-
-        return word;
+            return word[..^1];  // roles → role, users → user, aber nicht access → access
+        
+        return word;  // unverändert für Wörter die nicht auf s enden
     }
 }
