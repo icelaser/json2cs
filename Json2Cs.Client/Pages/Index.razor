@@ -143,7 +143,7 @@
             
             // Initialize C# editor (read-only)
             _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", 
-                string.IsNullOrWhiteSpace(GeneratedCode) ? "// C# classes appear here automatically..." : GeneratedCode, "csharp", false);
+                string.IsNullOrWhiteSpace(GeneratedCode) ? "// please enter a valid json. C# classes appear here automatically..." : GeneratedCode, "csharp", false);
         }
         catch (Exception ex)
         {
@@ -206,7 +206,7 @@
 
             if (_csharpEditor != null)
             {
-                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# classes appear here automatically...");
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// please enter a valid json.C# classes appear here automatically...");
             }
 
             return;
@@ -234,7 +234,7 @@
             
             if (_csharpEditor != null)
             {
-                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// C# classes appear here automatically...");
+                JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// please enter a valid json. C# classes appear here automatically...");
             }
         }
     }
