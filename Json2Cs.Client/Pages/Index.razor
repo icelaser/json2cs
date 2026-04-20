@@ -682,8 +682,48 @@
         // Phase 2: Klassen mit ähnlichen Namen und Properties mergen
         MergeSimilarClasses(definitions);
 
-        // Phase 3: Korrigiere Kommentare für wirklich gemischte Array-Typen
+        // Phase 3: Array-Typen nach Merge korrigieren (List<object> → List<KlassenName>)
+        FixArrayTypesAfterMerge(definitions);
+
+        // Phase 4: Korrigiere Kommentare für wirklich gemischte Array-Typen
         FixArrayTypeComments(definitions);
+    }
+
+    private void FixArrayTypesAfterMerge(List<ClassDefinition> definitions)
+    {
+        foreach (var cls in definitions)
+        {
+            for (int i = 0; i < cls.Properties.Count; i++)
+            {
+                var prop = cls.Properties[i];
+                if (prop.Type != "List<object>?" && prop.Type != "List<object>") 
+                    continue;
+
+                // Versuche eine passende Klasse zu finden
+                var baseName = ToPascalCase(ToSingular(prop.JsonName));
+                var matchingClass = definitions.FirstOrDefault(d => 
+                    d.Name == baseName || 
+                    StripNumberSuffix(d.Name) == baseName);
+
+                if (matchingClass != null)
+                {
+                    // List<object> durch List<KlassenName> ersetzen
+                    var isNullable = prop.Type.EndsWith("?");
+                    var newType = UseList 
+                        ? $"List<{matchingClass.Name}>" 
+                        : $"{matchingClass.Name}[]";
+                    if (isNullable) newType += "?";
+
+                    cls.Properties[i] = new PropertyDefinition(
+                        prop.JsonName,
+                        prop.Name,
+                        newType,
+                        prop.NeedsJsonAttribute,
+                        prop.Comment
+                    );
+                }
+            }
+        }
     }
 
     private void FixArrayTypeComments(List<ClassDefinition> definitions)
@@ -798,6 +838,11 @@
     {
         var match = Regex.Match(name, @"^(.+?)(\d+)$");
         return match.Success ? match.Groups[1].Value : name;
+    }
+
+    private static string StripNumberSuffix(string name)
+    {
+        return Regex.Replace(name, @"\d+$", "");
     }
 
     private bool AreClassesCompatible(List<ClassDefinition> group)
