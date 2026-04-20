@@ -496,6 +496,8 @@
     {
         var itemTypes = new List<string>();
         var singularName = ToSingular(typeName);
+        var hasPrimitives = false;
+        var hasObjects = false;
 
         foreach (var item in element.EnumerateArray())
         {
@@ -504,8 +506,45 @@
                 continue;
             }
 
-            var itemType = DetermineType(item, singularName, definitions);
-            itemTypes.Add(itemType);
+            if (item.ValueKind == JsonValueKind.Object)
+            {
+                hasObjects = true;
+                var itemType = DetermineType(item, singularName, definitions);
+                itemTypes.Add(itemType);
+            }
+            else if (item.ValueKind == JsonValueKind.Number)
+            {
+                hasPrimitives = true;
+                // Determine correct numeric type
+                if (item.TryGetInt32(out _))
+                {
+                    itemTypes.Add("int");
+                }
+                else if (item.TryGetInt64(out _))
+                {
+                    itemTypes.Add("long");
+                }
+                else if (item.TryGetDouble(out _))
+                {
+                    itemTypes.Add("double");
+                }
+                else
+                {
+                    itemTypes.Add("object"); // Fallback
+                }
+            }
+            else
+            {
+                hasPrimitives = true;
+                var itemType = DetermineType(item, singularName, definitions);
+                itemTypes.Add(itemType);
+            }
+        }
+
+        // Wenn gemischt (Primitive + Objekte) → always List<object>
+        if (hasPrimitives && hasObjects)
+        {
+            return UseList ? "List<object>" : "object[]";
         }
 
         string itemTypeResult;
@@ -517,7 +556,30 @@
         {
             var firstType = itemTypes[0];
             var allSame = itemTypes.All(t => t == firstType);
-            itemTypeResult = allSame ? firstType : "object";
+            
+            if (allSame)
+            {
+                itemTypeResult = firstType;
+            }
+            else
+            {
+                // Prüfe ob alle numerisch sind - dann zu größerem Typ upgraden
+                var allNumeric = itemTypes.All(t => t == "int" || t == "long" || t == "double");
+                if (allNumeric)
+                {
+                    // Upgrade zu größerem Typ wenn nötig
+                    if (itemTypes.Contains("double"))
+                        itemTypeResult = "double";
+                    else if (itemTypes.Contains("long"))
+                        itemTypeResult = "long";
+                    else
+                        itemTypeResult = "int";
+                }
+                else
+                {
+                    itemTypeResult = "object";
+                }
+            }
         }
 
         return UseList ? $"List<{itemTypeResult}>" : $"{itemTypeResult}[]";
@@ -685,8 +747,58 @@
         // Phase 3: Array-Typen nach Merge korrigieren (List<object> → List<KlassenName>)
         FixArrayTypesAfterMerge(definitions);
 
-        // Phase 4: Korrigiere Kommentare für wirklich gemischte Array-Typen
+        // Phase 4: Verwaiste Klassen entfernen
+        RemoveOrphanedClasses(definitions);
+
+        // Phase 5: Korrigiere Kommentare für wirklich gemischte Array-Typen
         FixArrayTypeComments(definitions);
+    }
+
+    private void RemoveOrphanedClasses(List<ClassDefinition> definitions)
+    {
+        var allReferencedTypes = new HashSet<string>();
+
+        // Sammle alle referenzierten Typen
+        foreach (var def in definitions)
+        {
+            foreach (var prop in def.Properties)
+            {
+                ExtractReferencedTypes(prop.Type, allReferencedTypes);
+            }
+        }
+
+        // Entferne verwaiste Klassen (nicht Root, nicht referenziert)
+        var orphaned = definitions
+            .Where(d => d.Name != "Root" && !allReferencedTypes.Contains(d.Name))
+            .ToList();
+
+        foreach (var orphan in orphaned)
+        {
+            definitions.Remove(orphan);
+        }
+    }
+
+    private void ExtractReferencedTypes(string type, HashSet<string> types)
+    {
+        // Extrahiere Klassen-Namen aus: List<ClassName>, ClassName[], ClassName?, ClassName
+        var matches = Regex.Matches(type, @"\b([A-Z][a-zA-Z0-9]*)\b");
+        foreach (Match match in matches)
+        {
+            var typeName = match.Groups[1].Value;
+            // Ignoriere primitive/System-Typen
+            if (!IsPrimitiveOrSystemType(typeName))
+            {
+                types.Add(typeName);
+            }
+        }
+    }
+
+    private bool IsPrimitiveOrSystemType(string typeName)
+    {
+        var systemTypes = new[] { "int", "long", "double", "string", "bool", "object", "byte", "short", 
+            "uint", "ulong", "ushort", "sbyte", "float", "decimal", "char", "List", "Dictionary", 
+            "DateOnly", "DateTimeOffset", "JsonElement" };
+        return systemTypes.Contains(typeName);
     }
 
     private void FixArrayTypesAfterMerge(List<ClassDefinition> definitions)
@@ -849,14 +961,28 @@
     {
         if (group.Count < 2) return false;
 
-        var firstProps = new HashSet<string>(group[0].Properties.Select(p => p.Name));
-
-        foreach (var def in group.Skip(1))
+        // Prüfe Similarity zwischen allen Klassen
+        for (int i = 0; i < group.Count; i++)
         {
-            var defProps = new HashSet<string>(def.Properties.Select(p => p.Name));
-            // Kompatibel wenn Properties gleich oder Subset
-            if (!firstProps.IsSubsetOf(defProps) && !defProps.IsSubsetOf(firstProps))
-                return false;
+            for (int j = i + 1; j < group.Count; j++)
+            {
+                var classA = group[i];
+                var classB = group[j];
+
+                var propsA = new HashSet<string>(classA.Properties.Select(p => p.JsonName));
+                var propsB = new HashSet<string>(classB.Properties.Select(p => p.JsonName));
+
+                // Zähle gemeinsame Properties
+                var commonCount = propsA.Intersect(propsB).Count();
+                var totalProps = Math.Max(propsA.Count, propsB.Count);
+
+                // Nur mergen wenn mindestens 50% Ähnlichkeit oder mindestens 1 gemeinsame Property
+                var similarity = totalProps > 0 ? (double)commonCount / totalProps : 0;
+                if (commonCount == 0 || similarity < 0.5)
+                {
+                    return false;
+                }
+            }
         }
 
         return true;
