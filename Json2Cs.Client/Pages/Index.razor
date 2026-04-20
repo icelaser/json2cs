@@ -359,6 +359,14 @@
         builder.AppendLine(AttributeMode == "system" ? "using System.Text.Json.Serialization;" : "using Newtonsoft.Json;");
         builder.AppendLine();
 
+        // Prüfe ob DateOnly verwendet wird
+        var usesDateOnly = definitions.Any(d => d.Properties.Any(p => p.Type.Contains("DateOnly")));
+        if (usesDateOnly)
+        {
+            builder.AppendLine("using System;");
+            builder.AppendLine();
+        }
+
         foreach (var definition in definitions)
         {
             builder.AppendLine($"public {definition.Kind} {definition.Name}");
@@ -417,12 +425,19 @@
 
     private string BuildObjectType(JsonElement element, string typeName, List<ClassDefinition> definitions)
     {
+        var properties = element.EnumerateObject().ToList();
+        if (properties.Count == 0)
+        {
+            // Leeres Objekt: keine Klasse anlegen, Dictionary verwenden
+            return "Dictionary<string, object>";
+        }
+
         var baseTypeName = string.IsNullOrWhiteSpace(ClassSuffix) ? typeName : typeName + ClassSuffix;
         var uniqueName = GetUniqueTypeName(baseTypeName, definitions);
         var kind = DeclarationType == "record" ? "record" : "class";
         var definition = new ClassDefinition(uniqueName, kind);
 
-        foreach (var property in element.EnumerateObject())
+        foreach (var property in properties)
         {
             var propertyName = ToPascalCase(property.Name);
 
@@ -449,7 +464,9 @@
             }
 
             var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
-            var comment = property.Value.ValueKind == JsonValueKind.Null ? "Typ konnte nicht ermittelt werden (null-Wert im JSON)" : null;
+            var comment = property.Value.ValueKind == JsonValueKind.Null ? "Typ konnte nicht ermittelt werden (null-Wert im JSON)" : 
+                         (propertyType == "Dictionary<string, object>" ? "Leeres Objekt im JSON - Dictionary als Fallback" : 
+                         (propertyType == "List<object>" ? "Gemischter Array-Typ im JSON" : null));
             definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, comment));
         }
 
@@ -459,28 +476,33 @@
 
     private string BuildArrayType(JsonElement element, string typeName, List<ClassDefinition> definitions)
     {
-        var itemType = "object";
-        var isEmpty = true;
+        var itemTypes = new List<string>();
+        var singularName = ToSingular(typeName);
 
         foreach (var item in element.EnumerateArray())
         {
-            isEmpty = false;
             if (item.ValueKind == JsonValueKind.Null)
             {
                 continue;
             }
 
-            var singularName = ToSingular(typeName);
-            itemType = DetermineType(item, singularName, definitions);
-            break;
+            var itemType = DetermineType(item, singularName, definitions);
+            itemTypes.Add(itemType);
         }
 
-        if (isEmpty)
+        string itemTypeResult;
+        if (itemTypes.Count == 0)
         {
-            itemType = "object /* Typ unbekannt - leeres Array */";
+            itemTypeResult = "object /* Typ unbekannt - leeres Array */";
+        }
+        else
+        {
+            var firstType = itemTypes[0];
+            var allSame = itemTypes.All(t => t == firstType);
+            itemTypeResult = allSame ? firstType : "object";
         }
 
-        return UseList ? $"List<{itemType}>" : $"{itemType}[]";
+        return UseList ? $"List<{itemTypeResult}>" : $"{itemTypeResult}[]";
     }
 
     private string MapPrimitiveType(JsonElement element)
@@ -488,9 +510,10 @@
         if (element.ValueKind == JsonValueKind.String)
         {
             var strValue = element.GetString();
-            if (!string.IsNullOrEmpty(strValue) && IsIsoDateTime(strValue))
+            if (!string.IsNullOrEmpty(strValue))
             {
-                return "DateTimeOffset";
+                if (IsIsoDate(strValue)) return "DateOnly";
+                if (IsIsoDateTime(strValue)) return "DateTimeOffset";
             }
             return "string";
         }
@@ -508,6 +531,12 @@
     {
         // ISO-8601 Pattern: 2026-04-19T10:15:30Z etc.
         return Regex.IsMatch(value, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}");
+    }
+
+    private static bool IsIsoDate(string value)
+    {
+        // Date-only Pattern: 2026-04-19
+        return Regex.IsMatch(value, @"^\d{4}-\d{2}-\d{2}$");
     }
 
     private string GetUniqueTypeName(string baseName, List<ClassDefinition> definitions)
