@@ -449,7 +449,8 @@
             }
 
             var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
-            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, null));
+            var comment = property.Value.ValueKind == JsonValueKind.Null ? "Typ konnte nicht ermittelt werden (null-Wert im JSON)" : null;
+            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, comment));
         }
 
         definitions.Add(definition);
@@ -498,7 +499,7 @@
         {
             JsonValueKind.Number => element.TryGetInt32(out _) ? "int" : element.TryGetInt64(out _) ? "long" : "double",
             JsonValueKind.True or JsonValueKind.False => "bool",
-            JsonValueKind.Null => "JsonElement",
+            JsonValueKind.Null => "object",
             _ => "object",
         };
     }
