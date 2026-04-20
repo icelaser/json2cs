@@ -63,6 +63,12 @@
                 <div class="option-group">
                     <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); _ = SaveSettingsToCookie(); })" /> List&lt;T&gt;</label>
                 </div>
+
+                <strong>Mode</strong>
+                <div class="option-group">
+                    <label><input type="radio" name="mode" value="smart" checked="@(SmartMode)" @onchange="@(e => { SmartMode = true; Generate(); _ = SaveSettingsToCookie(); })" /> Smart</label>
+                    <label><input type="radio" name="mode" value="strict" checked="@(!SmartMode)" @onchange="@(e => { SmartMode = false; Generate(); _ = SaveSettingsToCookie(); })" /> Strict</label>
+                </div>
             </div>
             @if (!string.IsNullOrWhiteSpace(ErrorMessage))
             {
@@ -116,6 +122,7 @@
     private string RootClassName { get; set; } = "Root";
     private string PropertyStyle { get; set; } = "get; set;";
     private string ClassSuffix { get; set; } = string.Empty;
+    private bool SmartMode { get; set; } = true;
     private string GeneratedCode { get; set; } = string.Empty;
     private string? ErrorMessage { get; set; }
     private string StatusMessage { get; set; } = "Ready.";
@@ -178,6 +185,11 @@
                     if (settings.TryGetProperty("classSuffix", out var classSuffix))
                     {
                         ClassSuffix = classSuffix.GetString() ?? ClassSuffix;
+                    }
+
+                    if (settings.TryGetProperty("smartMode", out var smartMode))
+                    {
+                        SmartMode = smartMode.GetBoolean();
                     }
                 }
             }
@@ -286,7 +298,8 @@
             @namespace = Namespace,
             rootClassName = RootClassName,
             propertyStyle = PropertyStyle,
-            classSuffix = ClassSuffix
+            classSuffix = ClassSuffix,
+            smartMode = SmartMode
         };
 
         var json = JsonSerializer.Serialize(settings);
@@ -342,6 +355,11 @@
         var definitions = new List<ClassDefinition>();
         var rootName = string.IsNullOrWhiteSpace(RootClassName) ? "Root" : RootClassName;
         var rootType = DetermineType(document.RootElement, rootName, definitions);
+
+        if (SmartMode)
+        {
+            ApplySmartModeTransformations(definitions);
+        }
 
         var builder = new StringBuilder();
 
@@ -652,6 +670,218 @@
             return word[..^1];  // roles → role, users → user, items → item, addresses → address
         
         return word;  // unverändert für Wörter die nicht auf s enden oder Sonderfälle
+    }
+
+    private void ApplySmartModeTransformations(List<ClassDefinition> definitions)
+    {
+        // Phase 1: Identische Klassen deduplizieren
+        var uniqueDefinitions = DeduplicateIdenticalClasses(definitions);
+        definitions.Clear();
+        definitions.AddRange(uniqueDefinitions);
+
+        // Phase 2: Klassen mit ähnlichen Namen und Properties mergen
+        MergeSimilarClasses(definitions);
+    }
+
+    private List<ClassDefinition> DeduplicateIdenticalClasses(List<ClassDefinition> definitions)
+    {
+        var seen = new Dictionary<string, ClassDefinition>();
+        var typeMapping = new Dictionary<string, string>();
+
+        foreach (var def in definitions)
+        {
+            var sig = GetClassSignature(def);
+            if (seen.ContainsKey(sig))
+            {
+                typeMapping[def.Name] = seen[sig].Name;
+            }
+            else
+            {
+                seen[sig] = def;
+            }
+        }
+
+        if (typeMapping.Count > 0)
+        {
+            UpdateAllReferences(seen.Values.ToList(), typeMapping);
+        }
+
+        return seen.Values.ToList();
+    }
+
+    private string GetClassSignature(ClassDefinition def)
+    {
+        var props = string.Join("|", def.Properties.OrderBy(p => p.Name).Select(p => $"{p.Name}:{p.Type}"));
+        return $"{def.Kind}:{props}";
+    }
+
+    private void MergeSimilarClasses(List<ClassDefinition> definitions)
+    {
+        var groups = new Dictionary<string, List<ClassDefinition>>();
+
+        // Group classes by base name (remove numeric suffixes)
+        foreach (var def in definitions)
+        {
+            var baseName = RemoveNumericSuffix(def.Name);
+            if (!groups.ContainsKey(baseName))
+                groups[baseName] = new();
+            groups[baseName].Add(def);
+        }
+
+        // Merge each group
+        var typeMapping = new Dictionary<string, string>();
+        var mergedDefs = new List<ClassDefinition>();
+
+        foreach (var (baseName, classGroup) in groups)
+        {
+            if (classGroup.Count == 1)
+            {
+                mergedDefs.Add(classGroup[0]);
+            }
+            else
+            {
+                // Check if properties are compatible for merging
+                if (AreClassesCompatible(classGroup))
+                {
+                    var merged = MergeClasses(baseName, classGroup);
+                    mergedDefs.Add(merged);
+
+                    // Record type mapping for references
+                    foreach (var cls in classGroup)
+                    {
+                        if (cls.Name != merged.Name)
+                            typeMapping[cls.Name] = merged.Name;
+                    }
+                }
+                else
+                {
+                    mergedDefs.AddRange(classGroup);
+                }
+            }
+        }
+
+        if (typeMapping.Count > 0)
+        {
+            UpdateAllReferences(mergedDefs, typeMapping);
+        }
+
+        definitions.Clear();
+        definitions.AddRange(mergedDefs);
+    }
+
+    private string RemoveNumericSuffix(string name)
+    {
+        var match = Regex.Match(name, @"^(.+?)(\d+)$");
+        return match.Success ? match.Groups[1].Value : name;
+    }
+
+    private bool AreClassesCompatible(List<ClassDefinition> group)
+    {
+        if (group.Count < 2) return false;
+
+        var firstProps = new HashSet<string>(group[0].Properties.Select(p => p.Name));
+
+        foreach (var def in group.Skip(1))
+        {
+            var defProps = new HashSet<string>(def.Properties.Select(p => p.Name));
+            // Kompatibel wenn Properties gleich oder Subset
+            if (!firstProps.IsSubsetOf(defProps) && !defProps.IsSubsetOf(firstProps))
+                return false;
+        }
+
+        return true;
+    }
+
+    private ClassDefinition MergeClasses(string baseName, List<ClassDefinition> group)
+    {
+        var merged = new ClassDefinition(baseName, group[0].Kind);
+        var propMap = new Dictionary<string, PropertyDefinition>();
+
+        // Collect all unique properties with type resolution
+        foreach (var cls in group)
+        {
+            foreach (var prop in cls.Properties)
+            {
+                if (!propMap.ContainsKey(prop.Name))
+                {
+                    propMap[prop.Name] = prop;
+                }
+                else
+                {
+                    // Resolve type conflict
+                    var existingType = propMap[prop.Name].Type;
+                    var newType = prop.Type;
+                    propMap[prop.Name] = new PropertyDefinition(
+                        prop.JsonName,
+                        prop.Name,
+                        ResolveConflictingType(existingType, newType),
+                        propMap[prop.Name].NeedsJsonAttribute || prop.NeedsJsonAttribute,
+                        propMap[prop.Name].Comment ?? prop.Comment
+                    );
+                }
+            }
+        }
+
+        foreach (var prop in propMap.Values)
+        {
+            merged.Properties.Add(prop);
+        }
+
+        return merged;
+    }
+
+    private string ResolveConflictingType(string type1, string type2)
+    {
+        if (type1 == type2) return type1;
+
+        // Remove ? suffix for comparison
+        var base1 = type1.TrimEnd('?');
+        var base2 = type2.TrimEnd('?');
+        var isNullable = type1.EndsWith("?") || type2.EndsWith("?");
+
+        var nonObjectType = (base1 != "object" ? base1 : null) ?? (base2 != "object" ? base2 : null);
+        var result = nonObjectType ?? "object";
+
+        return isNullable && !result.Contains("?") ? result + "?" : result;
+    }
+
+    private void UpdateAllReferences(List<ClassDefinition> definitions, Dictionary<string, string> typeMapping)
+    {
+        if (typeMapping.Count == 0) return;
+
+        foreach (var def in definitions)
+        {
+            for (int i = 0; i < def.Properties.Count; i++)
+            {
+                var prop = def.Properties[i];
+                var updatedType = ApplyTypeMapping(prop.Type, typeMapping);
+                
+                if (updatedType != prop.Type)
+                {
+                    def.Properties[i] = new PropertyDefinition(
+                        prop.JsonName,
+                        prop.Name,
+                        updatedType,
+                        prop.NeedsJsonAttribute,
+                        prop.Comment
+                    );
+                }
+            }
+        }
+    }
+
+    private string ApplyTypeMapping(string type, Dictionary<string, string> mapping)
+    {
+        foreach (var (oldName, newName) in mapping)
+        {
+            // Replace in List<X>, X[], X?
+            type = Regex.Replace(type, $@"List<{Regex.Escape(oldName)}>", $"List<{newName}>");
+            type = Regex.Replace(type, $@"List<{Regex.Escape(oldName)}\?>", $"List<{newName}?>");
+            type = type.Replace($"{oldName}[]", $"{newName}[]");
+            type = type.Replace($"{oldName}?", $"{newName}?");
+            if (type == oldName) type = newName;
+        }
+        return type;
     }
 
     private void ToggleSettings()
