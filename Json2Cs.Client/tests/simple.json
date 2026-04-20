@@ -1,0 +1,48 @@
+{
+  "id": 12345,
+  "name": "Testobject",
+  "description": "This is an example of a complex JSON structure",
+  "isActive": true,
+  "price": 19.99,
+  "discount": null,
+  "createdAt": "2026-04-19T10:15:30Z",
+  "tags": [
+    "test",
+    "json",
+    "csharp",
+    "generator"
+  ],
+  "roles": [
+    {
+      "id": 1,
+      "name": "Admin",
+      "permissions": [
+        "read",
+        "write",
+        "delete"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "User",
+      "permissions": [
+        "read"
+      ]
+    }
+  ],
+  "metadata": {
+    "version": 1,
+    "lastUpdated": "2026-04-18T08:00:00Z",
+    "flags": {
+      "isBeta": false,
+      "isDeprecated": false
+    }
+  },
+  "scores": [10, 20, 30, 40],
+  "coordinates": {
+    "latitude": 51.678,
+    "longitude": 7.816
+  },
+  "emptyList": [],
+  "optionalField": null
+}

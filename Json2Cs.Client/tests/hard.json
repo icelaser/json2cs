@@ -1,0 +1,127 @@
+{
+  "id": "9f1c2a7e-6b3d-4b1a-9c2e-123456789abc",
+  "index": 0,
+  "guid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "isActive": true,
+  "balance": -1234.56,
+  "picture": "https://example.com/image.png",
+  "age": 29,
+  "eyeColor": "green",
+  "status": 2,
+  "statusText": "ACTIVE",
+  "name": {
+    "first": "Max",
+    "last": "Mustermann",
+    "middle": null
+  },
+  "company": "Example GmbH",
+  "emails": [
+    "max@example.com",
+    null,
+    ""
+  ],
+  "phones": [
+    {
+      "type": "mobile",
+      "number": "+49 123 456789"
+    },
+    {
+      "type": "office",
+      "number": null
+    }
+  ],
+  "address": {
+    "street": "Musterstraße 1",
+    "city": "Beckum",
+    "zip": "59269",
+    "geo": {
+      "lat": 51.755,
+      "lng": 8.040,
+      "history": [
+        { "lat": 51.700, "lng": 8.000, "timestamp": "2026-01-01T00:00:00Z" },
+        { "lat": 51.710, "lng": 8.010, "timestamp": null }
+      ]
+    }
+  },
+  "registered": "2026-04-19T12:34:56Z",
+  "lastLogin": null,
+  "tags": [
+    "alpha",
+    123,
+    true,
+    null,
+    {
+      "nestedTag": "value"
+    }
+  ],
+  "friends": [
+    {
+      "id": 0,
+      "name": "Anna",
+      "since": "2020-01-01",
+      "meta": {}
+    },
+    {
+      "id": 1,
+      "name": "Bob",
+      "since": null,
+      "meta": {
+        "notes": ["met at work", null, ""]
+      }
+    }
+  ],
+  "settings": {
+    "theme": "dark",
+    "notifications": {
+      "email": true,
+      "sms": false,
+      "push": null
+    },
+    "features": {
+      "featureA": true,
+      "featureB": false,
+      "featureC": null
+    }
+  },
+  "metrics": {
+    "scores": [0, 1, -1, 9999999999],
+    "ratios": [0.1, 0.2, 0.30000000000000004],
+    "matrix": [
+      [1, 2, 3],
+      [4, 5],
+      []
+    ]
+  },
+  "dynamicProperties": {
+    "key1": "value",
+    "key2": 123,
+    "key3": {
+      "subKey": [1, 2, 3]
+    }
+  },
+  "history": [
+    {
+      "action": "created",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "changes": null
+    },
+    {
+      "action": "updated",
+      "timestamp": "2026-02-01T12:00:00Z",
+      "changes": [
+        { "field": "name.first", "old": "Max", "new": "Moritz" },
+        { "field": "status", "old": 1, "new": 2 }
+      ]
+    }
+  ],
+  "polymorphicList": [
+    { "type": "car", "wheels": 4 },
+    { "type": "bike", "wheels": 2 },
+    "just a string",
+    42,
+    null
+  ],
+  "emptyObject": {},
+  "emptyArray": [],
+  "nullableObject": null
+}
