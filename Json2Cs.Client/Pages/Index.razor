@@ -23,6 +23,12 @@
         <div class="settings-content">
             <div class="settings-header">Settings</div>
             <div class="options">
+                <strong>Mode</strong>
+                <div class="option-group">
+                    <label><input type="radio" name="mode" value="smart" checked="@(SmartMode)" @onchange="@(e => { SmartMode = true; Generate(); _ = SaveSettingsToCookie(); })" /> Smart</label>
+                    <label><input type="radio" name="mode" value="strict" checked="@(!SmartMode)" @onchange="@(e => { SmartMode = false; Generate(); _ = SaveSettingsToCookie(); })" /> Strict</label>
+                </div>
+
                 <strong>Declaration</strong>
                 <div class="option-group">
                     <label><input type="radio" name="declaration" value="class" checked="@(DeclarationType == "class")" @onchange="@(e => { DeclarationType = e.Value?.ToString() ?? "class"; Generate(); _ = SaveSettingsToCookie(); })" /> class</label>
@@ -62,12 +68,6 @@
                 </div>
                 <div class="option-group">
                     <label><input type="checkbox" checked="@UseList" @onchange="@(e => { UseList = (bool)(e.Value ?? false); Generate(); _ = SaveSettingsToCookie(); })" /> List&lt;T&gt;</label>
-                </div>
-
-                <strong>Mode</strong>
-                <div class="option-group">
-                    <label><input type="radio" name="mode" value="smart" checked="@(SmartMode)" @onchange="@(e => { SmartMode = true; Generate(); _ = SaveSettingsToCookie(); })" /> Smart</label>
-                    <label><input type="radio" name="mode" value="strict" checked="@(!SmartMode)" @onchange="@(e => { SmartMode = false; Generate(); _ = SaveSettingsToCookie(); })" /> Strict</label>
                 </div>
             </div>
             @if (!string.IsNullOrWhiteSpace(ErrorMessage))
@@ -681,6 +681,31 @@
 
         // Phase 2: Klassen mit ähnlichen Namen und Properties mergen
         MergeSimilarClasses(definitions);
+
+        // Phase 3: Korrigiere Kommentare für wirklich gemischte Array-Typen
+        FixArrayTypeComments(definitions);
+    }
+
+    private void FixArrayTypeComments(List<ClassDefinition> definitions)
+    {
+        foreach (var def in definitions)
+        {
+            for (int i = 0; i < def.Properties.Count; i++)
+            {
+                var prop = def.Properties[i];
+                // Nur "gemischter Array-Typ" Kommentar behalten, wenn wirklich List<object>
+                if (prop.Comment == "Gemischter Array-Typ im JSON" && !prop.Type.Contains("List<object>"))
+                {
+                    def.Properties[i] = new PropertyDefinition(
+                        prop.JsonName,
+                        prop.Name,
+                        prop.Type,
+                        prop.NeedsJsonAttribute,
+                        null  // Kommentar entfernen, da Array jetzt typisiert ist
+                    );
+                }
+            }
+        }
     }
 
     private List<ClassDefinition> DeduplicateIdenticalClasses(List<ClassDefinition> definitions)
