@@ -475,6 +475,11 @@
             }
 
             var propertyType = DetermineType(property.Value, propertyName, definitions);
+            var isMixedArray = propertyType.Contains("__MIXED__");
+            if (isMixedArray)
+            {
+                propertyType = propertyType.Replace("__MIXED__", "");
+            }
 
             if (UseNullableReferences && IsReferenceType(propertyType))
             {
@@ -483,8 +488,8 @@
 
             var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
             var comment = property.Value.ValueKind == JsonValueKind.Null ? "Typ konnte nicht ermittelt werden (null-Wert im JSON)" : 
-                         (propertyType == "Dictionary<string, object>" ? "Leeres Objekt im JSON - Dictionary als Fallback" : 
-                         (propertyType == "List<object>" ? "Gemischter Array-Typ im JSON" : null));
+                         (isMixedArray ? "Gemischter Array-Typ - bitte manuell anpassen" :
+                         (propertyType == "Dictionary<string, object>" ? "Leeres Objekt im JSON - Dictionary als Fallback" : null));
             definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, comment));
         }
 
@@ -544,7 +549,7 @@
         // Wenn gemischt (Primitive + Objekte) → always List<object>
         if (hasPrimitives && hasObjects)
         {
-            return UseList ? "List<object>" : "object[]";
+            return UseList ? "List<object>__MIXED__" : "object[]__MIXED__";
         }
 
         string itemTypeResult;
