@@ -499,10 +499,30 @@
 
     private string BuildArrayType(JsonElement element, string typeName, List<ClassDefinition> definitions)
     {
-        var itemTypes = new List<string>();
         var singularName = ToSingular(typeName);
-        var hasPrimitives = false;
-        var hasObjects = false;
+        
+        // Früh-Check: Sammle alle ValueKinds (außer Null)
+        var kinds = element.EnumerateArray()
+            .Where(i => i.ValueKind != JsonValueKind.Null)
+            .Select(i => i.ValueKind)
+            .Distinct()
+            .ToList();
+
+        // Prüfe ob gemischt (Objekte + Primitive) → always List<object>
+        var hasObjectKind = kinds.Contains(JsonValueKind.Object);
+        var hasPrimitiveKind = kinds.Any(k =>
+            k == JsonValueKind.String ||
+            k == JsonValueKind.Number ||
+            k == JsonValueKind.True ||
+            k == JsonValueKind.False);
+
+        if (hasObjectKind && hasPrimitiveKind)
+        {
+            return UseList ? "List<object>__MIXED__" : "object[]__MIXED__";
+        }
+
+        // Nur Primitive oder nur Objekte
+        var itemTypes = new List<string>();
 
         foreach (var item in element.EnumerateArray())
         {
@@ -513,13 +533,11 @@
 
             if (item.ValueKind == JsonValueKind.Object)
             {
-                hasObjects = true;
                 var itemType = DetermineType(item, singularName, definitions);
                 itemTypes.Add(itemType);
             }
             else if (item.ValueKind == JsonValueKind.Number)
             {
-                hasPrimitives = true;
                 // Determine correct numeric type
                 if (item.TryGetInt32(out _))
                 {
@@ -540,16 +558,9 @@
             }
             else
             {
-                hasPrimitives = true;
                 var itemType = DetermineType(item, singularName, definitions);
                 itemTypes.Add(itemType);
             }
-        }
-
-        // Wenn gemischt (Primitive + Objekte) → always List<object>
-        if (hasPrimitives && hasObjects)
-        {
-            return UseList ? "List<object>__MIXED__" : "object[]__MIXED__";
         }
 
         string itemTypeResult;
