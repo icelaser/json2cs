@@ -24,6 +24,9 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+# Analytics config mit echten IDs
+**/wwwroot/appsettings.json
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json
