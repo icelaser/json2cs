@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "json2cs",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "Json2Cs.Client", "--urls", "http://localhost:5284"],
+      "port": 5284
+    }
+  ]
+}
