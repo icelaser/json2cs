@@ -1,9 +1,7 @@
 @page "/"
-@using System.Text
 @using System.Text.Json
-@using System.Text.Json.Serialization
-@using System.Text.RegularExpressions
 @inject IJSRuntime JS
+@inject CSharpClassGenerator Generator
 @implements IDisposable
 
 <PageTitle>json2cs.dev</PageTitle>
@@ -134,7 +132,6 @@
     private IJSObjectReference? _csharpEditor;
     private DotNetObjectReference<Index>? _dotNetRef;
     private bool _isCopied = false;
-    private List<ClassDefinition> _currentDefinitions = new();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -204,6 +201,19 @@
         }
     }
 
+    private GeneratorOptions BuildOptions() => new()
+    {
+        DeclarationType = DeclarationType,
+        AttributeMode = AttributeMode,
+        UseNullableReferences = UseNullableReferences,
+        UseList = UseList,
+        Namespace = Namespace,
+        RootClassName = RootClassName,
+        PropertyStyle = PropertyStyle,
+        ClassSuffix = ClassSuffix,
+        SmartMode = SmartMode
+    };
+
     private async Task InitializeMonacoEditors()
     {
         try
@@ -231,9 +241,9 @@
 
             // Initialize JSON editor
             _jsonEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "json-editor", JsonInput, "json", true, _dotNetRef);
-            
+
             // Initialize C# editor (read-only)
-            _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor", 
+            _csharpEditor = await JS.InvokeAsync<IJSObjectReference>("initializeMonacoEditor", "csharp-editor",
                 string.IsNullOrWhiteSpace(GeneratedCode) ? "// please enter a valid json. C# classes appear here automatically..." : GeneratedCode, "csharp", false);
         }
         catch (Exception ex)
@@ -254,11 +264,11 @@
     private void OnJsonInputChangedInternal(string value)
     {
         JsonInput = value;
-        
+
         // Debounce the generation
         _debounceTimer?.Stop();
         _debounceTimer?.Dispose();
-        
+
         _debounceTimer = new System.Timers.Timer(300);
         _debounceTimer.Elapsed += (sender, e) => {
             InvokeAsync(() => {
@@ -280,7 +290,7 @@
         await JS.InvokeVoidAsync("copyToClipboard", GeneratedCode);
         _isCopied = true;
         StateHasChanged();
-        
+
         // Reset after 2 seconds
         await Task.Delay(2000);
         _isCopied = false;
@@ -312,7 +322,6 @@
         {
             ErrorMessage = string.Empty;
             GeneratedCode = string.Empty;
-            _currentDefinitions.Clear();
 
             if (_csharpEditor != null)
             {
@@ -325,10 +334,11 @@
         try
         {
             ErrorMessage = string.Empty;
-            GeneratedCode = BuildCode();
-            StatusMessage = $"{GetClassCount()} Classes • {GetPropertyCount()} Properties • {GetLineCount()} Lines";
+            var result = Generator.Generate(JsonInput, BuildOptions());
+            GeneratedCode = result.Code;
+            StatusMessage = $"{result.ClassCount} Classes • {result.PropertyCount} Properties • {result.LineCount} Lines";
             JS.InvokeVoidAsync("updateStatusDisplay", StatusMessage);
-            
+
             if (_csharpEditor != null)
             {
                 JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, GeneratedCode);
@@ -337,763 +347,15 @@
         catch (Exception ex)
         {
             GeneratedCode = string.Empty;
-            _currentDefinitions.Clear();
             ErrorMessage = ex.Message;
             StatusMessage = string.Empty;
             JS.InvokeVoidAsync("updateStatusDisplay", "Ready.");
-            
+
             if (_csharpEditor != null)
             {
                 JS.InvokeVoidAsync("updateMonacoEditor", _csharpEditor, "// please enter a valid json. C# classes appear here automatically...");
             }
         }
-    }
-
-    private string BuildCode()
-    {
-        using var document = JsonDocument.Parse(JsonInput);
-        var definitions = new List<ClassDefinition>();
-        var rootName = string.IsNullOrWhiteSpace(RootClassName) ? "Root" : RootClassName;
-        var rootType = DetermineType(document.RootElement, rootName, definitions);
-
-        if (SmartMode)
-        {
-            ApplySmartModeTransformations(definitions);
-        }
-
-        var builder = new StringBuilder();
-
-        if (UseNullableReferences)
-        {
-            builder.AppendLine("#nullable enable");
-            builder.AppendLine();
-        }
-
-        if (UseList)
-        {
-            builder.AppendLine("using System.Collections.Generic;");
-        }
-
-        builder.AppendLine(AttributeMode == "system" ? "using System.Text.Json.Serialization;" : "using Newtonsoft.Json;");
-        builder.AppendLine();
-
-        // Prüfe ob DateOnly verwendet wird
-        var usesDateOnly = definitions.Any(d => d.Properties.Any(p => p.Type.Contains("DateOnly")));
-        if (usesDateOnly)
-        {
-            builder.AppendLine("using System;");
-            builder.AppendLine();
-        }
-
-        foreach (var definition in definitions)
-        {
-            builder.AppendLine($"public {definition.Kind} {definition.Name}");
-            builder.AppendLine("{");
-
-            foreach (var property in definition.Properties)
-            {
-                if (!string.IsNullOrEmpty(property.Comment))
-                {
-                    builder.AppendLine($"    // {property.Comment}");
-                }
-
-                if (property.NeedsJsonAttribute)
-                {
-                    var attributeName = AttributeMode == "system" ? "JsonPropertyName" : "JsonProperty";
-                    builder.AppendLine($"    [{attributeName}(\"{property.JsonName}\")]");
-                }
-
-                builder.AppendLine($"    public {property.Type} {property.Name} {{ {PropertyStyle} }}");
-            }
-
-            builder.AppendLine("}");
-            builder.AppendLine();
-        }
-
-        if (definitions.Count == 0)
-        {
-            builder.AppendLine($"// Unable to generate types for root type: {rootType}");
-        }
-
-        _currentDefinitions = definitions;
-        var code = builder.ToString().TrimEnd();
-
-        if (!string.IsNullOrWhiteSpace(Namespace))
-        {
-            code = $"namespace {Namespace}\n{{\n{IndentLines(code, "    ")}\n}}";
-        }
-
-        return code;
-    }
-
-    private static string IndentLines(string value, string indent)
-    {
-        return string.Join("\n", value.Split('\n').Select(line => string.IsNullOrWhiteSpace(line) ? line : indent + line));
-    }
-
-    private string DetermineType(JsonElement element, string typeName, List<ClassDefinition> definitions)
-    {
-        return element.ValueKind switch
-        {
-            JsonValueKind.Object => BuildObjectType(element, typeName, definitions),
-            JsonValueKind.Array => BuildArrayType(element, typeName, definitions),
-            _ => MapPrimitiveType(element)
-        };
-    }
-
-    private string BuildObjectType(JsonElement element, string typeName, List<ClassDefinition> definitions)
-    {
-        var properties = element.EnumerateObject().ToList();
-        if (properties.Count == 0)
-        {
-            // Leeres Objekt: keine Klasse anlegen, Dictionary verwenden
-            return "Dictionary<string, object>";
-        }
-
-        var baseTypeName = string.IsNullOrWhiteSpace(ClassSuffix) ? typeName : typeName + ClassSuffix;
-        var uniqueName = GetUniqueTypeName(baseTypeName, definitions);
-        var kind = DeclarationType == "record" ? "record" : "class";
-        var definition = new ClassDefinition(uniqueName, kind);
-
-        foreach (var property in properties)
-        {
-            var propertyName = ToPascalCase(property.Name);
-
-            if (string.IsNullOrWhiteSpace(propertyName))
-            {
-                propertyName = "Item";
-            }
-
-            if (char.IsDigit(propertyName[0]))
-            {
-                propertyName = "_" + propertyName;
-            }
-
-            if (ReservedWords.Contains(propertyName))
-            {
-                propertyName = "@" + propertyName;
-            }
-
-            var propertyType = DetermineType(property.Value, propertyName, definitions);
-            var isMixedArray = propertyType.Contains("__MIXED__");
-            if (isMixedArray)
-            {
-                propertyType = propertyType.Replace("__MIXED__", "");
-            }
-
-            if (UseNullableReferences && IsReferenceType(propertyType))
-            {
-                propertyType += "?";
-            }
-
-            var needsAttribute = property.Name != propertyName || property.Name.Contains("_");
-            var comment = property.Value.ValueKind == JsonValueKind.Null ? "Typ konnte nicht ermittelt werden (null-Wert im JSON)" : 
-                         (isMixedArray ? "Gemischter Array-Typ - bitte manuell anpassen" :
-                         (propertyType == "Dictionary<string, object>" ? "Leeres Objekt im JSON - Dictionary als Fallback" : null));
-            definition.Properties.Add(new PropertyDefinition(property.Name, propertyName, propertyType, needsAttribute, comment));
-        }
-
-        definitions.Add(definition);
-        return uniqueName;
-    }
-
-    private string BuildArrayType(JsonElement element, string typeName, List<ClassDefinition> definitions)
-    {
-        var singularName = ToSingular(typeName);
-        
-        // Früh-Check: Sammle alle ValueKinds (außer Null)
-        var kinds = element.EnumerateArray()
-            .Where(i => i.ValueKind != JsonValueKind.Null)
-            .Select(i => i.ValueKind)
-            .Distinct()
-            .ToList();
-
-        // Prüfe ob gemischt (Objekte + Primitive) → always List<object>
-        var hasObjectKind = kinds.Contains(JsonValueKind.Object);
-        var hasPrimitiveKind = kinds.Any(k =>
-            k == JsonValueKind.String ||
-            k == JsonValueKind.Number ||
-            k == JsonValueKind.True ||
-            k == JsonValueKind.False);
-
-        if (hasObjectKind && hasPrimitiveKind)
-        {
-            return UseList ? "List<object>__MIXED__" : "object[]__MIXED__";
-        }
-
-        // Nur Primitive oder nur Objekte
-        var itemTypes = new List<string>();
-
-        foreach (var item in element.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.Null)
-            {
-                continue;
-            }
-
-            if (item.ValueKind == JsonValueKind.Object)
-            {
-                var itemType = DetermineType(item, singularName, definitions);
-                itemTypes.Add(itemType);
-            }
-            else if (item.ValueKind == JsonValueKind.Number)
-            {
-                // Determine correct numeric type
-                if (item.TryGetInt32(out _))
-                {
-                    itemTypes.Add("int");
-                }
-                else if (item.TryGetInt64(out _))
-                {
-                    itemTypes.Add("long");
-                }
-                else if (item.TryGetDouble(out _))
-                {
-                    itemTypes.Add("double");
-                }
-                else
-                {
-                    itemTypes.Add("object"); // Fallback
-                }
-            }
-            else
-            {
-                var itemType = DetermineType(item, singularName, definitions);
-                itemTypes.Add(itemType);
-            }
-        }
-
-        string itemTypeResult;
-        if (itemTypes.Count == 0)
-        {
-            itemTypeResult = "object /* Typ unbekannt - leeres Array */";
-        }
-        else
-        {
-            var firstType = itemTypes[0];
-            var allSame = itemTypes.All(t => t == firstType);
-            
-            if (allSame)
-            {
-                itemTypeResult = firstType;
-            }
-            else
-            {
-                // Prüfe ob alle numerisch sind - dann zu größerem Typ upgraden
-                var allNumeric = itemTypes.All(t => t == "int" || t == "long" || t == "double");
-                if (allNumeric)
-                {
-                    // Upgrade zu größerem Typ wenn nötig
-                    if (itemTypes.Contains("double"))
-                        itemTypeResult = "double";
-                    else if (itemTypes.Contains("long"))
-                        itemTypeResult = "long";
-                    else
-                        itemTypeResult = "int";
-                }
-                else
-                {
-                    itemTypeResult = "object";
-                }
-            }
-        }
-
-        return UseList ? $"List<{itemTypeResult}>" : $"{itemTypeResult}[]";
-    }
-
-    private string MapPrimitiveType(JsonElement element)
-    {
-        if (element.ValueKind == JsonValueKind.String)
-        {
-            var strValue = element.GetString();
-            if (!string.IsNullOrEmpty(strValue))
-            {
-                if (IsIsoDate(strValue)) return "DateOnly";
-                if (IsIsoDateTime(strValue)) return "DateTimeOffset";
-            }
-            return "string";
-        }
-
-        return element.ValueKind switch
-        {
-            JsonValueKind.Number => element.TryGetInt32(out _) ? "int" : element.TryGetInt64(out _) ? "long" : "double",
-            JsonValueKind.True or JsonValueKind.False => "bool",
-            JsonValueKind.Null => "object",
-            _ => "object",
-        };
-    }
-
-    private static bool IsIsoDateTime(string value)
-    {
-        // ISO-8601 Pattern: 2026-04-19T10:15:30Z etc.
-        return Regex.IsMatch(value, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}");
-    }
-
-    private static bool IsIsoDate(string value)
-    {
-        // Date-only Pattern: 2026-04-19
-        return Regex.IsMatch(value, @"^\d{4}-\d{2}-\d{2}$");
-    }
-
-    private string GetUniqueTypeName(string baseName, List<ClassDefinition> definitions)
-    {
-        var name = baseName;
-        var count = 1;
-
-        while (definitions.Any(d => d.Name == name))
-        {
-            name = baseName + count;
-            count++;
-        }
-
-        return name;
-    }
-
-    private bool IsReferenceType(string typeName)
-    {
-        var primitives = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "int",
-            "long",
-            "double",
-            "bool",
-            "byte",
-            "short",
-            "uint",
-            "ulong",
-            "ushort",
-            "sbyte",
-            "float",
-            "decimal",
-            "char"
-        };
-
-        if (typeName.EndsWith("[]", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        if (typeName.StartsWith("List<", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return !primitives.Contains(typeName.TrimEnd('?'));
-    }
-
-    private static string ToPascalCase(string input)
-    {
-        var words = Regex.Split(input.Trim(), "[^A-Za-z0-9]+")
-            .Where(w => !string.IsNullOrWhiteSpace(w))
-            .Select(w => char.ToUpperInvariant(w[0]) + w.Substring(1));
-
-        var result = string.Concat(words);
-        if (string.IsNullOrEmpty(result))
-        {
-            return "Item";
-        }
-
-        return result;
-    }
-
-    private static readonly HashSet<string> ReservedWords = new(StringComparer.Ordinal)
-    {
-        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class",
-        "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event",
-        "explicit", "extern", "false", "finally", "fixed", "float", "for", "foreach", "goto", "if",
-        "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace", "new",
-        "null", "object", "operator", "out", "override", "params", "private", "protected", "public",
-        "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static",
-        "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong",
-        "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while"
-    };
-
-    private sealed record ClassDefinition(string Name, string Kind)
-    {
-        public List<PropertyDefinition> Properties { get; } = new();
-    }
-
-    private sealed record PropertyDefinition(string JsonName, string Name, string Type, bool NeedsJsonAttribute, string? Comment);
-
-    private static string ToSingular(string word)
-    {
-        if (string.IsNullOrEmpty(word))
-            return word;
-
-        // Englische Pluralregeln - von spezifisch zu allgemein
-        if (word.EndsWith("ies", StringComparison.OrdinalIgnoreCase) && word.Length > 3)
-            return word[..^3] + "y";  // categories → category, companies → company
-        
-        if (word.EndsWith("ves", StringComparison.OrdinalIgnoreCase) && word.Length > 3)
-            return word[..^3] + "f";  // leaves → leaf, knives → knife (vereinfacht)
-        
-        if (word.EndsWith("es", StringComparison.OrdinalIgnoreCase) && word.Length > 2)
-        {
-            // Spezielle Fälle für -es
-            if (word.EndsWith("ches", StringComparison.OrdinalIgnoreCase) ||
-                word.EndsWith("shes", StringComparison.OrdinalIgnoreCase) ||
-                word.EndsWith("sses", StringComparison.OrdinalIgnoreCase) ||
-                word.EndsWith("xes", StringComparison.OrdinalIgnoreCase))
-                return word[..^2];  // churches → church, bushes → bush, etc.
-            
-            if (word.EndsWith("oes", StringComparison.OrdinalIgnoreCase))
-                return word[..^2];  // heroes → hero
-            
-            // Reguläre -es Endungen
-            return word[..^1];  // addresses → address, boxes → box
-        }
-        
-        if (word.EndsWith("s", StringComparison.OrdinalIgnoreCase) && word.Length > 1 && 
-            !word.EndsWith("ss", StringComparison.OrdinalIgnoreCase))
-            return word[..^1];  // roles → role, users → user, items → item, addresses → address
-        
-        return word;  // unverändert für Wörter die nicht auf s enden oder Sonderfälle
-    }
-
-    private void ApplySmartModeTransformations(List<ClassDefinition> definitions)
-    {
-        // Phase 1: Identische Klassen deduplizieren
-        var uniqueDefinitions = DeduplicateIdenticalClasses(definitions);
-        definitions.Clear();
-        definitions.AddRange(uniqueDefinitions);
-
-        // Phase 2: Klassen mit ähnlichen Namen und Properties mergen
-        MergeSimilarClasses(definitions);
-
-        // Phase 3: Array-Typen nach Merge korrigieren (List<object> → List<KlassenName>)
-        FixArrayTypesAfterMerge(definitions);
-
-        // Phase 4: Verwaiste Klassen entfernen
-        RemoveOrphanedClasses(definitions);
-
-        // Phase 5: Korrigiere Kommentare für wirklich gemischte Array-Typen
-        FixArrayTypeComments(definitions);
-    }
-
-    private void RemoveOrphanedClasses(List<ClassDefinition> definitions)
-    {
-        var allReferencedTypes = new HashSet<string>();
-
-        // Sammle alle referenzierten Typen
-        foreach (var def in definitions)
-        {
-            foreach (var prop in def.Properties)
-            {
-                ExtractReferencedTypes(prop.Type, allReferencedTypes);
-            }
-        }
-
-        // Entferne verwaiste Klassen (nicht Root, nicht referenziert)
-        var orphaned = definitions
-            .Where(d => d.Name != "Root" && !allReferencedTypes.Contains(d.Name))
-            .ToList();
-
-        foreach (var orphan in orphaned)
-        {
-            definitions.Remove(orphan);
-        }
-    }
-
-    private void ExtractReferencedTypes(string type, HashSet<string> types)
-    {
-        // Extrahiere Klassen-Namen aus: List<ClassName>, ClassName[], ClassName?, ClassName
-        var matches = Regex.Matches(type, @"\b([A-Z][a-zA-Z0-9]*)\b");
-        foreach (Match match in matches)
-        {
-            var typeName = match.Groups[1].Value;
-            // Ignoriere primitive/System-Typen
-            if (!IsPrimitiveOrSystemType(typeName))
-            {
-                types.Add(typeName);
-            }
-        }
-    }
-
-    private bool IsPrimitiveOrSystemType(string typeName)
-    {
-        var systemTypes = new[] { "int", "long", "double", "string", "bool", "object", "byte", "short", 
-            "uint", "ulong", "ushort", "sbyte", "float", "decimal", "char", "List", "Dictionary", 
-            "DateOnly", "DateTimeOffset", "JsonElement" };
-        return systemTypes.Contains(typeName);
-    }
-
-    private void FixArrayTypesAfterMerge(List<ClassDefinition> definitions)
-    {
-        foreach (var cls in definitions)
-        {
-            for (int i = 0; i < cls.Properties.Count; i++)
-            {
-                var prop = cls.Properties[i];
-                if (prop.Type != "List<object>?" && prop.Type != "List<object>") 
-                    continue;
-
-                // Versuche eine passende Klasse zu finden
-                var baseName = ToPascalCase(ToSingular(prop.JsonName));
-                var matchingClass = definitions.FirstOrDefault(d => 
-                    d.Name == baseName || 
-                    StripNumberSuffix(d.Name) == baseName);
-
-                if (matchingClass != null)
-                {
-                    // List<object> durch List<KlassenName> ersetzen
-                    var isNullable = prop.Type.EndsWith("?");
-                    var newType = UseList 
-                        ? $"List<{matchingClass.Name}>" 
-                        : $"{matchingClass.Name}[]";
-                    if (isNullable) newType += "?";
-
-                    cls.Properties[i] = new PropertyDefinition(
-                        prop.JsonName,
-                        prop.Name,
-                        newType,
-                        prop.NeedsJsonAttribute,
-                        prop.Comment
-                    );
-                }
-            }
-        }
-    }
-
-    private void FixArrayTypeComments(List<ClassDefinition> definitions)
-    {
-        foreach (var def in definitions)
-        {
-            for (int i = 0; i < def.Properties.Count; i++)
-            {
-                var prop = def.Properties[i];
-                // Nur "gemischter Array-Typ" Kommentar behalten, wenn wirklich List<object>
-                if (prop.Comment == "Gemischter Array-Typ im JSON" && !prop.Type.Contains("List<object>"))
-                {
-                    def.Properties[i] = new PropertyDefinition(
-                        prop.JsonName,
-                        prop.Name,
-                        prop.Type,
-                        prop.NeedsJsonAttribute,
-                        null  // Kommentar entfernen, da Array jetzt typisiert ist
-                    );
-                }
-            }
-        }
-    }
-
-    private List<ClassDefinition> DeduplicateIdenticalClasses(List<ClassDefinition> definitions)
-    {
-        var seen = new Dictionary<string, ClassDefinition>();
-        var typeMapping = new Dictionary<string, string>();
-
-        foreach (var def in definitions)
-        {
-            var sig = GetClassSignature(def);
-            if (seen.ContainsKey(sig))
-            {
-                typeMapping[def.Name] = seen[sig].Name;
-            }
-            else
-            {
-                seen[sig] = def;
-            }
-        }
-
-        if (typeMapping.Count > 0)
-        {
-            UpdateAllReferences(seen.Values.ToList(), typeMapping);
-        }
-
-        return seen.Values.ToList();
-    }
-
-    private string GetClassSignature(ClassDefinition def)
-    {
-        var props = string.Join("|", def.Properties.OrderBy(p => p.Name).Select(p => $"{p.Name}:{p.Type}"));
-        return $"{def.Kind}:{props}";
-    }
-
-    private void MergeSimilarClasses(List<ClassDefinition> definitions)
-    {
-        var groups = new Dictionary<string, List<ClassDefinition>>();
-
-        // Group classes by base name (remove numeric suffixes)
-        foreach (var def in definitions)
-        {
-            var baseName = RemoveNumericSuffix(def.Name);
-            if (!groups.ContainsKey(baseName))
-                groups[baseName] = new();
-            groups[baseName].Add(def);
-        }
-
-        // Merge each group
-        var typeMapping = new Dictionary<string, string>();
-        var mergedDefs = new List<ClassDefinition>();
-
-        foreach (var (baseName, classGroup) in groups)
-        {
-            if (classGroup.Count == 1)
-            {
-                mergedDefs.Add(classGroup[0]);
-            }
-            else
-            {
-                // Check if properties are compatible for merging
-                if (AreClassesCompatible(classGroup))
-                {
-                    var merged = MergeClasses(baseName, classGroup);
-                    mergedDefs.Add(merged);
-
-                    // Record type mapping for references
-                    foreach (var cls in classGroup)
-                    {
-                        if (cls.Name != merged.Name)
-                            typeMapping[cls.Name] = merged.Name;
-                    }
-                }
-                else
-                {
-                    mergedDefs.AddRange(classGroup);
-                }
-            }
-        }
-
-        if (typeMapping.Count > 0)
-        {
-            UpdateAllReferences(mergedDefs, typeMapping);
-        }
-
-        definitions.Clear();
-        definitions.AddRange(mergedDefs);
-    }
-
-    private string RemoveNumericSuffix(string name)
-    {
-        var match = Regex.Match(name, @"^(.+?)(\d+)$");
-        return match.Success ? match.Groups[1].Value : name;
-    }
-
-    private static string StripNumberSuffix(string name)
-    {
-        return Regex.Replace(name, @"\d+$", "");
-    }
-
-    private bool AreClassesCompatible(List<ClassDefinition> group)
-    {
-        if (group.Count < 2) return false;
-
-        // Prüfe Similarity zwischen allen Klassen
-        for (int i = 0; i < group.Count; i++)
-        {
-            for (int j = i + 1; j < group.Count; j++)
-            {
-                var classA = group[i];
-                var classB = group[j];
-
-                var propsA = new HashSet<string>(classA.Properties.Select(p => p.JsonName));
-                var propsB = new HashSet<string>(classB.Properties.Select(p => p.JsonName));
-
-                // Zähle gemeinsame Properties
-                var commonCount = propsA.Intersect(propsB).Count();
-                var totalProps = Math.Max(propsA.Count, propsB.Count);
-
-                // Nur mergen wenn mindestens 50% Ähnlichkeit oder mindestens 1 gemeinsame Property
-                var similarity = totalProps > 0 ? (double)commonCount / totalProps : 0;
-                if (commonCount == 0 || similarity < 0.5)
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private ClassDefinition MergeClasses(string baseName, List<ClassDefinition> group)
-    {
-        var merged = new ClassDefinition(baseName, group[0].Kind);
-        var propMap = new Dictionary<string, PropertyDefinition>();
-
-        // Collect all unique properties with type resolution
-        foreach (var cls in group)
-        {
-            foreach (var prop in cls.Properties)
-            {
-                if (!propMap.ContainsKey(prop.Name))
-                {
-                    propMap[prop.Name] = prop;
-                }
-                else
-                {
-                    // Resolve type conflict
-                    var existingType = propMap[prop.Name].Type;
-                    var newType = prop.Type;
-                    propMap[prop.Name] = new PropertyDefinition(
-                        prop.JsonName,
-                        prop.Name,
-                        ResolveConflictingType(existingType, newType),
-                        propMap[prop.Name].NeedsJsonAttribute || prop.NeedsJsonAttribute,
-                        propMap[prop.Name].Comment ?? prop.Comment
-                    );
-                }
-            }
-        }
-
-        foreach (var prop in propMap.Values)
-        {
-            merged.Properties.Add(prop);
-        }
-
-        return merged;
-    }
-
-    private string ResolveConflictingType(string type1, string type2)
-    {
-        if (type1 == type2) return type1;
-
-        // Remove ? suffix for comparison
-        var base1 = type1.TrimEnd('?');
-        var base2 = type2.TrimEnd('?');
-        var isNullable = type1.EndsWith("?") || type2.EndsWith("?");
-
-        var nonObjectType = (base1 != "object" ? base1 : null) ?? (base2 != "object" ? base2 : null);
-        var result = nonObjectType ?? "object";
-
-        return isNullable && !result.Contains("?") ? result + "?" : result;
-    }
-
-    private void UpdateAllReferences(List<ClassDefinition> definitions, Dictionary<string, string> typeMapping)
-    {
-        if (typeMapping.Count == 0) return;
-
-        foreach (var def in definitions)
-        {
-            for (int i = 0; i < def.Properties.Count; i++)
-            {
-                var prop = def.Properties[i];
-                var updatedType = ApplyTypeMapping(prop.Type, typeMapping);
-                
-                if (updatedType != prop.Type)
-                {
-                    def.Properties[i] = new PropertyDefinition(
-                        prop.JsonName,
-                        prop.Name,
-                        updatedType,
-                        prop.NeedsJsonAttribute,
-                        prop.Comment
-                    );
-                }
-            }
-        }
-    }
-
-    private string ApplyTypeMapping(string type, Dictionary<string, string> mapping)
-    {
-        foreach (var (oldName, newName) in mapping)
-        {
-            // Replace in List<X>, X[], X?
-            type = Regex.Replace(type, $@"List<{Regex.Escape(oldName)}>", $"List<{newName}>");
-            type = Regex.Replace(type, $@"List<{Regex.Escape(oldName)}\?>", $"List<{newName}?>");
-            type = type.Replace($"{oldName}[]", $"{newName}[]");
-            type = type.Replace($"{oldName}?", $"{newName}?");
-            if (type == oldName) type = newName;
-        }
-        return type;
     }
 
     private void ToggleSettings()
@@ -1107,14 +369,4 @@
         _debounceTimer?.Dispose();
         _dotNetRef?.Dispose();
     }
-
-    private int GetClassCount() => _currentDefinitions.Count;
-    
-    private int GetPropertyCount() => _currentDefinitions.Sum(d => d.Properties.Count);
-    
-    private int GetLineCount() => string.IsNullOrWhiteSpace(GeneratedCode) ? 0 : GeneratedCode.Split('\n').Length;
-    
-    private bool HasUnknownTypes() => _currentDefinitions.Any(d => d.Properties.Any(p => p.Type.Contains("object") || p.Type.Contains("?")));
-    
-    private int GetUnknownTypeCount() => _currentDefinitions.Sum(d => d.Properties.Count(p => p.Type.Contains("object") || (p.Type.Contains("?") && !p.Type.StartsWith("string"))));
 }
