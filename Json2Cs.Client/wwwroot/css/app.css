@@ -357,20 +357,68 @@ html, body {
     border-color: #1A80B6;
 }
 
-/* ===== COPY BUTTON ===== */
-.copy-btn {
-    background: #1A80B6;
+/* ===== PANEL ACTIONS ===== */
+.panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+/* ===== ICON BUTTON (Fullscreen etc.) ===== */
+.icon-btn {
+    background: transparent;
     border: none;
     color: #CCCCCC;
     height: 26px;
+    width: 26px;
     cursor: pointer;
-    padding: 0.25rem;
+    padding: 0;
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
-    margin-left: auto;
+}
+
+.icon-btn:hover {
+    background: #3E3E3E;
+    color: #FFFFFF;
+}
+
+.icon-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* ===== FULLSCREEN PANEL ===== */
+.panel.fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 0 !important;
+    border: none;
+}
+
+/* ===== COPY BUTTON ===== */
+.copy-btn {
+    background: #1A80B6;
+    border: none;
+    color: #FFFFFF;
+    height: 26px;
+    cursor: pointer;
+    padding: 0 10px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
 .copy-btn:hover {
@@ -382,6 +430,11 @@ html, body {
     background: #1A80B6;
 }
 
+.copy-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .copy-btn svg {
     width: 16px;
     height: 16px;
@@ -390,16 +443,6 @@ html, body {
 
 .copy-btn.copied {
     color: #4EC9B0;
-}
-
-.copy-btn.copied svg {
-    display: none;
-}
-
-.copy-btn.copied::after {
-    content: "✓";
-    font-size: 14px;
-    font-weight: bold;
 }
 
 /* ===== OPTIONS ===== */
@@ -612,55 +655,140 @@ html, body {
     text-decoration: underline;
 }
 
+/* ===== MOBILE TABS (nur auf kleinen Screens sichtbar) ===== */
+.mobile-tabs {
+    display: none;
+    flex-shrink: 0;
+    background: #252526;
+    border-bottom: 1px solid #3E3E3E;
+}
+
+.mobile-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #CCCCCC;
+    padding: 10px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mobile-tab.active {
+    color: #FFFFFF;
+    border-bottom-color: #1A80B6;
+    background: #1E1E1E;
+}
+
+/* ===== MOBILE "GENERATE" FAB (führt zum C#-Output-Tab) ===== */
+.mobile-generate-btn {
+    display: none;
+    position: fixed;
+    right: 16px;
+    bottom: 52px;
+    z-index: 100;
+    align-items: center;
+    gap: 4px;
+    background: #1A80B6;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 24px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.mobile-generate-btn:active {
+    background: #146691;
+}
+
+.mobile-generate-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
 /* ===== RESPONSIVE DESIGN ===== */
 @media (max-width: 768px) {
-  .app-shell {
-    height: auto;
-    min-height: 100vh;
-    overflow-y: auto;
-  }
-
-  .app-content {
-    flex-direction: column;
-    height: auto;
-    overflow: visible;
-  }
-
-  .settings-panel {
-    width: 100% !important;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid #3E3E3E;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 12px;
-  }
-
-  .settings-panel.collapsed {
-    height: auto;
-    width: 100% !important;
+  /* Feste Viewport-Höhe statt Seiten-Scroll; dvh berücksichtigt die Browser-Leiste */
+  html, body {
+    height: 100%;
     overflow: hidden;
   }
 
-  .editor-panel,
-  .output-panel {
-    width: 100%;
-    height: 45vh;
-    min-height: 300px;
+  .app-shell {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .app-content {
+    overflow: hidden;
+  }
+
+  /* Spalten- auf Stapel-Layout umstellen */
+  .layout-container {
+    flex-direction: column;
+  }
+
+  .settings-panel,
+  .settings-panel.collapsed {
+    width: 100% !important;
+    flex-shrink: 0;
     border-right: none;
     border-bottom: 1px solid #3E3E3E;
   }
 
-  .monaco-container {
-    height: 100%;
+  /* Eingeklappt: schmale einzeilige Leiste statt großem zentrierten Block */
+  .settings-panel.collapsed {
+    padding: 6px 12px;
   }
 
-  .panel-header {
-    display: flex;
+  .settings-toggle {
+    flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  .settings-panel.collapsed .settings-toggle-text {
+    writing-mode: horizontal-tb;
+  }
+
+  /* Tab-Leiste einblenden */
+  .mobile-tabs {
+    display: flex;
+  }
+
+  /* Panel-Titel ist redundant zur Tab-Leiste → ausblenden, Buttons bleiben */
+  .panel-title {
+    display: none;
+  }
+
+  /* "Generate"-FAB nur im JSON-Tab zeigen (führt zur C#-Ausgabe) */
+  .layout-container.tab-json .mobile-generate-btn {
+    display: inline-flex;
+  }
+
+  /* Aktives Panel füllt den Rest; inaktives wird ausgeblendet */
+  .panel.json-panel,
+  .output-panel {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    height: auto;
+    border-right: none;
+  }
+
+  .layout-container.tab-json .output-panel {
+    display: none;
+  }
+
+  .layout-container.tab-csharp .json-panel {
+    display: none;
   }
 
   .footer-center {
