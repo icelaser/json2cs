@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@inject IConfiguration Configuration
+@inject IJSRuntime JS
 <div class="app-shell">
     <header class="app-header">
         <div class="header-container">
@@ -39,3 +41,17 @@
         </div>
     </footer>
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var gaId = Configuration["Analytics:GoogleAnalyticsId"];
+            if (!string.IsNullOrWhiteSpace(gaId))
+            {
+                await JS.InvokeVoidAsync("initGoogleAnalytics", gaId);
+            }
+        }
+    }
+}
