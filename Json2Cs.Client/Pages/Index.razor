@@ -78,6 +78,22 @@
     <div class="mobile-tabs">
         <button class="mobile-tab @(_mobileTab == "json" ? "active" : "")" @onclick='() => _mobileTab = "json"'>JSON Input</button>
         <button class="mobile-tab @(_mobileTab == "csharp" ? "active" : "")" @onclick='() => _mobileTab = "csharp"'>C# Output</button>
+        <div class="mobile-tab-actions">
+            <button class="icon-btn" @onclick="() => ToggleFullscreen(_mobileTab)" title="Vollbild">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="@ExpandIcon" />
+                </svg>
+            </button>
+            @if (_mobileTab == "csharp")
+            {
+                <button class="copy-btn @( _isCopied ? "copied" : "" )" @onclick="CopyCode" disabled="@string.IsNullOrWhiteSpace(GeneratedCode)" title="Copy to clipboard">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                    <span class="copy-btn-text">@(_isCopied ? "Copied!" : "Copy")</span>
+                </button>
+            }
+        </div>
     </div>
 
     <section class="panel json-panel @(_fullscreenPanel == "json" ? "fullscreen" : "")">
